@@ -1,8 +1,8 @@
 import os
 from threading import Thread
 from flask import Flask
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 
 # --- Flask App for UptimeRobot (Isko nahi chhedna hai) ---
 app = Flask('')
@@ -37,13 +37,26 @@ MOVIES_DATA = [
     {"title": "The Explorer Bow Bow", "poster": "https://i.postimg.cc/HxY336f0/The-Movie-Nobita-The-Explorer-Bow-Bow-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20The%20Explorer%20Bow%20Bow"},
 ]
 
-# Aapka naya Welcome Poster ka Link
 WELCOME_POSTER_URL = "https://iili.io/KxiipSV.png"
 
 # ====================================================================
-# START COMMAND: Ab ye aapke naye poster ke saath welcome karega
+# START COMMAND: Ab ye permanent keyboard bhi set karega
 # ====================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Neeche dikhne wala permanent keyboard
+    reply_keyboard = [[KeyboardButton("🎬 All Movies")]]
+    
+    await update.message.reply_text(
+        "Bot started! Click the 'All Movies' button below to see the list.",
+        reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
+    )
+    # Start command ke baad movie list bhi bhej dete hain
+    await show_movie_list(update, context)
+
+# ====================================================================
+# MOVIE LIST DIKHANE WALA FUNCTION
+# ====================================================================
+async def show_movie_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = []
     for index, movie in enumerate(MOVIES_DATA):
         button = InlineKeyboardButton(movie["title"], callback_data=f'movie_{index}')
@@ -94,10 +107,13 @@ def main():
     keep_alive()
     application = Application.builder().token(TOKEN).build()
 
+    # Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
+    # Ye naya handler "All Movies" button ke liye hai
+    application.add_handler(MessageHandler(filters.Regex('^🎬 All Movies$'), show_movie_list))
     
-    print("DoreBox Bot (Final Version) is running!")
+    print("DoreBox Bot (ULTIMATE Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
