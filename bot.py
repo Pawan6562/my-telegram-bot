@@ -40,13 +40,12 @@ MOVIES_DATA = [
 WELCOME_POSTER_URL = "https://iili.io/KxiipSV.png"
 
 # ====================================================================
-# START COMMAND: Aapke naye welcome message ke saath
+# START COMMAND: Ab ismein channel ka link bhi hai
 # ====================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Neeche dikhne wala permanent keyboard
     reply_keyboard = [[KeyboardButton("🎬 All Movies")]]
     
-    # Aapka naya, updated welcome message
+    # Aapka naya, updated welcome message with link
     welcome_text = """
 👋 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁! 🎬💙
 
@@ -60,12 +59,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 👉 𝗕𝗮𝘀 𝗺𝗼𝘃𝗶𝗲 𝗰𝗵𝗼𝗼𝘀𝗲 𝗸𝗶𝗷𝗶𝘆𝗲, 𝗮𝗽𝗻𝗶 𝗽𝗮𝘀𝗮𝗻𝗱 𝗸𝗶 𝗾𝘂𝗮𝗹𝗶𝘁𝘆 𝘀𝗲𝗹𝗲𝗰𝘁 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝘂𝗿 𝗲𝗻𝗷𝗼𝘆 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝗽𝗻𝗮 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲 𝗧𝗶𝗺𝗲! 🍿💙
 
-📢 𝗛𝗮𝗺𝗮𝗿𝗲 𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦 𝗰𝗵𝗮𝗻𝗻𝗲𝗹 𝗸𝗼 𝗷𝗼𝗶𝗻 𝗸𝗮𝗿𝗻𝗮 𝗻𝗮 𝗯𝗵𝗼𝗼𝗹𝗲𝗻, 𝘁𝗮𝗮𝗸𝗶 𝗻𝗲𝘄 𝘂𝗽𝗱𝗮𝘁𝗲𝘀 𝗮𝗮𝗽𝗸𝗼 𝘀𝗮𝗯𝘀𝗲 𝗽𝗲𝗵𝗹𝗲 𝗺𝗶𝗹𝘀𝗮𝗸𝗲𝗻! 🚀
+📢 𝗛𝗮𝗺𝗮𝗿𝗲 [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_all_movies_bycjh) 𝗰𝗵𝗮𝗻𝗻𝗲𝗹 𝗸𝗼 𝗷𝗼𝗶𝗻 𝗸𝗮𝗿𝗻𝗮 𝗻𝗮 𝗯𝗵𝗼𝗼𝗹𝗲𝗻, 𝘁𝗮𝗮𝗸𝗶 𝗻𝗲𝘄 𝘂𝗽𝗱𝗮𝘁𝗲𝘀 𝗮𝗮𝗽𝗸𝗼 𝘀𝗮𝗯𝘀𝗲 𝗽𝗲𝗵𝗹𝗲 𝗺𝗶𝗹𝘀𝗮𝗸𝗲𝗻! 🚀
 """
     
     await update.message.reply_text(
         welcome_text,
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True),
+        parse_mode='Markdown', # Markdown ko enable karna zaroori hai
+        disable_web_page_preview=True # Taaki link ka preview na aaye
     )
 
 # ====================================================================
@@ -122,7 +123,7 @@ def main():
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.Regex('^🎬 All Movies$'), show_movie_list))
     
-    print("DoreBox Bot (Grand Finale Version) is running!")
+    print("DoreBox Bot (Grand Finale Version with Link) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
