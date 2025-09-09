@@ -2,7 +2,7 @@ import os
 from threading import Thread
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 # --- Flask App for UptimeRobot (Isko nahi chhedna hai) ---
 app = Flask('')
@@ -37,80 +37,60 @@ MOVIES_DATA = [
     {"title": "The Explorer Bow Bow", "poster": "https://i.postimg.cc/HxY336f0/The-Movie-Nobita-The-Explorer-Bow-Bow-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20The%20Explorer%20Bow%20Bow"},
 ]
 
-WELCOME_POSTER_URL = "https://iili.io/KxiipSV.png"
+# Movie titles ko ek alag list mein daal dete hain
+MOVIE_TITLES = [movie['title'] for movie in MOVIES_DATA]
 
 # ====================================================================
-# START COMMAND: Ab ismein channel ka link bhi hai
+# START COMMAND: Ab ye neeche movies ki list dega
 # ====================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    reply_keyboard = [[KeyboardButton("🎬 All Movies")]]
-    
-    # Aapka naya, updated welcome message with link
+    # Buttons ko 2-2 ki line mein arrange karte hain
+    keyboard = []
+    for i in range(0, len(MOVIE_TITLES), 2):
+        row = [KeyboardButton(MOVIE_TITLES[i])]
+        if i + 1 < len(MOVIE_TITLES):
+            row.append(KeyboardButton(MOVIE_TITLES[i+1]))
+        keyboard.append(row)
+
     welcome_text = """
 👋 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁! 🎬💙
 
-🚀 𝗬𝗮𝗵𝗮𝗮𝗻 𝗮𝗮𝗽𝗸𝗼 𝗺𝗶𝗹𝘁𝗶 𝗵𝗮𝗶𝗻 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗸𝗶 𝘀𝗮𝗯𝘀𝗲 𝘇𝗮𝗯𝗮𝗿𝗱𝗮𝘀𝘁 𝗺𝗼𝘃𝗶𝗲𝘀, 𝗯𝗶𝗹𝗸𝘂𝗹 𝗲𝗮𝘀𝘆 𝗮𝘂𝗿 𝗳𝗮𝘀𝘁 𝗱𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗸𝗲 𝘀𝗮𝗮𝘁𝗵।
-
-✨ 𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:
-🔹 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗛𝗶𝗻𝗱𝗶 𝗗𝘂𝗯𝗯𝗲𝗱 𝗠𝗼𝘃𝗶𝗲𝘀 (𝗢𝗹𝗱 + 𝗟𝗮𝘁𝗲𝘀𝘁)
-🔹 𝗠𝘂𝗹𝘁𝗶-𝗤𝘂𝗮𝗹𝗶𝘁𝘆 𝗗𝗼𝘄𝗻𝗹𝗼𝗮𝗱𝘀: 𝟭𝟬𝟴𝟬𝗽 | 𝟳𝟮𝟬𝗽 | 𝟯𝟲𝟬𝗽 🎥
-🔹 𝗗𝗶𝗿𝗲𝗰𝘁 & 𝗙𝗮𝘀𝘁 𝗟𝗶𝗻𝗸𝘀 – 𝗻𝗼 𝘁𝗶𝗺𝗲 𝘄𝗮𝘀𝘁𝗲!
-🔹 𝗥𝗲𝗴𝘂𝗹𝗮𝗿 𝗠𝗼𝘃𝗶𝗲 𝗨𝗽𝗱𝗮𝘁𝗲𝘀
-
-👉 𝗕𝗮𝘀 𝗺𝗼𝘃𝗶𝗲 𝗰𝗵𝗼𝗼𝘀𝗲 𝗸𝗶𝗷𝗶𝘆𝗲, 𝗮𝗽𝗻𝗶 𝗽𝗮𝘀𝗮𝗻𝗱 𝗸𝗶 𝗾𝘂𝗮𝗹𝗶𝘁𝘆 𝘀𝗲𝗹𝗲𝗰𝘁 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝘂𝗿 𝗲𝗻𝗷𝗼𝘆 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝗽𝗻𝗮 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲 𝗧𝗶𝗺𝗲! 🍿💙
-
-📢 𝗛𝗮𝗺𝗮𝗿𝗲 [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_all_movies_bycjh) 𝗰𝗵𝗮𝗻𝗻𝗲𝗹 𝗸𝗼 𝗷𝗼𝗶𝗻 𝗸𝗮𝗿𝗻𝗮 𝗻𝗮 𝗯𝗵𝗼𝗼𝗹𝗲𝗻, 𝘁𝗮𝗮𝗸𝗶 𝗻𝗲𝘄 𝘂𝗽𝗱𝗮𝘁𝗲𝘀 𝗮𝗮𝗽𝗸𝗼 𝘀𝗮𝗯𝘀𝗲 𝗽𝗲𝗵𝗹𝗲 𝗺𝗶𝗹𝘀𝗮𝗸𝗲𝗻! 🚀
+👇 Neeche diye gaye menu se apni pasand ki movie select kijiye.
 """
     
     await update.message.reply_text(
         welcome_text,
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True),
-        parse_mode='Markdown', # Markdown ko enable karna zaroori hai
-        disable_web_page_preview=True # Taaki link ka preview na aaye
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     )
 
 # ====================================================================
-# MOVIE LIST DIKHANE WALA FUNCTION
+# MOVIE HANDLER: Jab user kisi movie ke naam par click karta hai
 # ====================================================================
-async def show_movie_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    keyboard = []
-    for index, movie in enumerate(MOVIES_DATA):
-        button = InlineKeyboardButton(movie["title"], callback_data=f'movie_{index}')
-        keyboard.append([button])
+async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    movie_title = update.message.text
     
-    keyboard.append([InlineKeyboardButton("📣 Join My Channel", url="https://t.me/doraemon_all_movies_bycjh")])
+    # Dhoondho ki user ne kaun si movie select ki hai
+    selected_movie = None
+    for movie in MOVIES_DATA:
+        if movie['title'] == movie_title:
+            selected_movie = movie
+            break
     
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await context.bot.send_photo(
-        chat_id=update.effective_chat.id,
-        photo=WELCOME_POSTER_URL,
-        caption="Please select a movie from the buttons below to get its download link instantly!",
-        reply_markup=reply_markup
-    )
+    # Agar movie mil gayi, to uska poster bhejo
+    if selected_movie:
+        keyboard = [[InlineKeyboardButton("✅ Download / Watch Now ✅", url=selected_movie["link"])]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
-# ====================================================================
-# BUTTON HANDLER: Jab user kisi movie button par click karta hai
-# ====================================================================
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-
-    movie_index = int(query.data.split('_')[1])
-    movie = MOVIES_DATA[movie_index]
-    
-    keyboard = [[InlineKeyboardButton("✅ Download / Watch Now ✅", url=movie["link"])]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await query.delete_message()
-
-    await context.bot.send_photo(
-        chat_id=query.message.chat_id,
-        photo=movie["poster"],
-        caption=f"🎬 **{movie['title']}**\n\nClick the button below to download the movie.",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
+        await context.bot.send_photo(
+            chat_id=update.effective_chat.id,
+            photo=selected_movie["poster"],
+            caption=f"🎬 **{selected_movie['title']}**\n\nClick the button below to download the movie.",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    else:
+        # Agar user kuch aur type karta hai to
+        await update.message.reply_text("Please select a valid movie from the menu below.")
 
 # ====================================================================
 # MAIN FUNCTION (Isko nahi chhedna hai)
@@ -120,10 +100,11 @@ def main():
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.Regex('^🎬 All Movies$'), show_movie_list))
     
-    print("DoreBox Bot (Grand Finale Version with Link) is running!")
+    # Ye naya handler har movie ke naam ke liye hai
+    application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
+    
+    print("DoreBox Bot (Direct Menu Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
