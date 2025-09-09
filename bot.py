@@ -37,11 +37,11 @@ MOVIES_DATA = [
     {"title": "The Explorer Bow Bow", "poster": "https://i.postimg.cc/HxY336f0/The-Movie-Nobita-The-Explorer-Bow-Bow-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20The%20Explorer%20Bow%20Bow"},
 ]
 
-# Welcome Poster ka Link
-WELCOME_POSTER_URL = "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg" # Maine abhi ke liye ek movie ka poster use kar liya hai
+# Aapka naya Welcome Poster ka Link
+WELCOME_POSTER_URL = "https://iili.io/KxiipSV.png"
 
 # ====================================================================
-# START COMMAND: Ab ye poster ke saath welcome karega
+# START COMMAND: Ab ye aapke naye poster ke saath welcome karega
 # ====================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = []
@@ -53,12 +53,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Ab hum text ki jagah photo bhejenge
     await context.bot.send_photo(
         chat_id=update.effective_chat.id,
         photo=WELCOME_POSTER_URL,
         caption=(
-            "👋 **Hello! Welcome to the Official Doraemon Movies Bot.**\n\n"
+            "👋 **Hello! Welcome to the Official DoreBox Bot.**\n\n"
             "Select any movie from the buttons below to get its download link instantly!"
         ),
         reply_markup=reply_markup,
@@ -78,11 +77,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     keyboard = [[InlineKeyboardButton("✅ Download / Watch Now ✅", url=movie["link"])]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Yahan hum message ko edit nahi karenge, balki naya message bhejenge poster ke saath
-    # Pehle purana message (jisme buttons the) delete kar dete hain
     await query.delete_message()
 
-    # Ab naya message poster ke saath bhejte hain
     await context.bot.send_photo(
         chat_id=query.message.chat_id,
         photo=movie["poster"],
@@ -101,7 +97,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    print("Doraemon Movies Bot (Professional Version) is running!")
+    print("DoreBox Bot (Final Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
