@@ -41,7 +41,7 @@ MOVIES_DATA = [
 MOVIE_TITLES = [movie['title'] for movie in MOVIES_DATA]
 
 # ====================================================================
-# START COMMAND: Ab ye neeche movies ki list dega
+# START COMMAND: Ab ye aapka original welcome message bhejega
 # ====================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Buttons ko 2-2 ki line mein arrange karte hain
@@ -52,15 +52,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             row.append(KeyboardButton(MOVIE_TITLES[i+1]))
         keyboard.append(row)
 
+    # Aapka original, detailed welcome message
     welcome_text = """
 👋 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁! 🎬💙
 
-👇 Neeche diye gaye menu se apni pasand ki movie select kijiye.
+🚀 𝗬𝗮𝗵𝗮𝗮𝗻 𝗮𝗮𝗽𝗸𝗼 𝗺𝗶𝗹𝘁𝗶 𝗵𝗮𝗶𝗻 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗸𝗶 𝘀𝗮𝗯𝘀𝗲 𝘇𝗮𝗯𝗮𝗿𝗱𝗮𝘀𝘁 𝗺𝗼𝘃𝗶𝗲𝘀, 𝗯𝗶𝗹𝗸𝘂𝗹 𝗲𝗮𝘀𝘆 𝗮𝘂𝗿 𝗳𝗮𝘀𝘁 𝗱𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗸𝗲 𝘀𝗮𝗮𝘁𝗵।
+
+✨ 𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:
+🔹 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗛𝗶𝗻𝗱𝗶 𝗗𝘂𝗯𝗯𝗲𝗱 𝗠𝗼𝘃𝗶𝗲𝘀 (𝗢𝗹𝗱 + 𝗟𝗮𝘁𝗲𝘀𝘁)
+🔹 𝗠𝘂𝗹𝘁𝗶-𝗤𝘂𝗮𝗹𝗶𝘁𝘆 𝗗𝗼𝘄𝗻𝗹𝗼𝗮𝗱𝘀: 𝟭𝟬𝟴𝟬𝗽 | 𝟳𝟮𝟬𝗽 | 𝟯𝟲𝟬𝗽 🎥
+🔹 𝗗𝗶𝗿𝗲𝗰𝘁 & 𝗙𝗮𝘀𝘁 𝗟𝗶𝗻𝗸𝘀 – 𝗻𝗼 𝘁𝗶𝗺𝗲 𝘄𝗮𝘀𝘁𝗲!
+🔹 𝗥𝗲𝗴𝘂𝗹𝗮𝗿 𝗠𝗼𝘃𝗶𝗲 𝗨𝗽𝗱𝗮𝘁𝗲𝘀
+
+👉 𝗕𝗮𝘀 𝗺𝗼𝘃𝗶𝗲 𝗰𝗵𝗼𝗼𝘀𝗲 𝗸𝗶𝗷𝗶𝘆𝗲, 𝗮𝗽𝗻𝗶 𝗽𝗮𝘀𝗮𝗻𝗱 𝗸𝗶 𝗾𝘂𝗮𝗹𝗶𝘁𝘆 𝘀𝗲𝗹𝗲𝗰𝘁 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝘂𝗿 𝗲𝗻𝗷𝗼𝘆 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝗽𝗻𝗮 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲 𝗧𝗶𝗺𝗲! 🍿💙
+
+📢 𝗛𝗮𝗺𝗮𝗿𝗲 [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_all_movies_bycjh) 𝗰𝗵𝗮𝗻𝗻𝗲𝗹 𝗸𝗼 𝗷𝗼𝗶𝗻 𝗸𝗮𝗿𝗻𝗮 𝗻𝗮 𝗯𝗵𝗼𝗼𝗹𝗲𝗻, 𝘁𝗮𝗮𝗸𝗶 𝗻𝗲𝘄 𝘂𝗽𝗱𝗮𝘁𝗲𝘀 𝗮𝗮𝗽𝗸𝗼 𝘀𝗮𝗯𝘀𝗲 𝗽𝗲𝗵𝗹𝗲 𝗺𝗶𝗹𝘀𝗮𝗸𝗲𝗻! 🚀
+
+👇 *Neeche diye gaye menu se apni pasand ki movie select kijiye.*
 """
     
     await update.message.reply_text(
         welcome_text,
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
+        parse_mode='Markdown',
+        disable_web_page_preview=True
     )
 
 # ====================================================================
@@ -69,14 +84,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     movie_title = update.message.text
     
-    # Dhoondho ki user ne kaun si movie select ki hai
     selected_movie = None
     for movie in MOVIES_DATA:
         if movie['title'] == movie_title:
             selected_movie = movie
             break
     
-    # Agar movie mil gayi, to uska poster bhejo
     if selected_movie:
         keyboard = [[InlineKeyboardButton("✅ Download / Watch Now ✅", url=selected_movie["link"])]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -89,7 +102,6 @@ async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             parse_mode='Markdown'
         )
     else:
-        # Agar user kuch aur type karta hai to
         await update.message.reply_text("Please select a valid movie from the menu below.")
 
 # ====================================================================
@@ -100,11 +112,9 @@ def main():
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
-    
-    # Ye naya handler har movie ke naam ke liye hai
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
     
-    print("DoreBox Bot (Direct Menu Version) is running!")
+    print("DoreBox Bot (The Real Final Direct Menu Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
