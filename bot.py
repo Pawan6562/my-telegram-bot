@@ -40,18 +40,17 @@ MOVIES_DATA = [
 WELCOME_POSTER_URL = "https://iili.io/KxiipSV.png"
 
 # ====================================================================
-# START COMMAND: Ab ye permanent keyboard bhi set karega
+# START COMMAND: Sirf welcome message aur permanent keyboard bhejega
 # ====================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Neeche dikhne wala permanent keyboard
     reply_keyboard = [[KeyboardButton("🎬 All Movies")]]
     
     await update.message.reply_text(
-        "Bot started! Click the 'All Movies' button below to see the list.",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True)
+        "👋 **Hello! Welcome to the Official DoreBox Bot.**\n\n"
+        "Click the '🎬 All Movies' button below to see the list of all available movies.",
+        reply_markup=ReplyKeyboardMarkup(reply_keyboard, resize_keyboard=True, one_time_keyboard=False),
+        parse_mode='Markdown'
     )
-    # Start command ke baad movie list bhi bhej dete hain
-    await show_movie_list(update, context)
 
 # ====================================================================
 # MOVIE LIST DIKHANE WALA FUNCTION
@@ -69,12 +68,8 @@ async def show_movie_list(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await context.bot.send_photo(
         chat_id=update.effective_chat.id,
         photo=WELCOME_POSTER_URL,
-        caption=(
-            "👋 **Hello! Welcome to the Official DoreBox Bot.**\n\n"
-            "Select any movie from the buttons below to get its download link instantly!"
-        ),
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
+        caption="Please select a movie from the buttons below to get its download link instantly!",
+        reply_markup=reply_markup
     )
 
 # ====================================================================
@@ -107,13 +102,11 @@ def main():
     keep_alive()
     application = Application.builder().token(TOKEN).build()
 
-    # Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
-    # Ye naya handler "All Movies" button ke liye hai
     application.add_handler(MessageHandler(filters.Regex('^🎬 All Movies$'), show_movie_list))
     
-    print("DoreBox Bot (ULTIMATE Version) is running!")
+    print("DoreBox Bot (The Real Final Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
