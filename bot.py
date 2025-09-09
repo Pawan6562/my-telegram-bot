@@ -21,7 +21,6 @@ TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 # ====================================================================
 # YAHAN AAPKI SAARI MOVIES KA DATA HAI
-# Future mein nayi movie add karne ke liye, bas is list mein ek aur line add kar dena.
 # ====================================================================
 MOVIES_DATA = [
     {"title": "Jadoo Mantar aur Jhanoom", "poster": "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom"},
@@ -38,25 +37,30 @@ MOVIES_DATA = [
     {"title": "The Explorer Bow Bow", "poster": "https://i.postimg.cc/HxY336f0/The-Movie-Nobita-The-Explorer-Bow-Bow-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20The%20Explorer%20Bow%20Bow"},
 ]
 
+# Welcome Poster ka Link
+WELCOME_POSTER_URL = "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg" # Maine abhi ke liye ek movie ka poster use kar liya hai
+
 # ====================================================================
-# START COMMAND: User ko welcome karta hai aur movie list dikhata hai
+# START COMMAND: Ab ye poster ke saath welcome karega
 # ====================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Har movie ke liye ek button banate hain
     keyboard = []
     for index, movie in enumerate(MOVIES_DATA):
-        # Har button ka data 'movie_0', 'movie_1', etc. hoga
         button = InlineKeyboardButton(movie["title"], callback_data=f'movie_{index}')
         keyboard.append([button])
     
-    # Aakhri mein Channel ka button daal dete hain
     keyboard.append([InlineKeyboardButton("📣 Join My Channel", url="https://t.me/doraemon_all_movies_bycjh")])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
-        "👋 **Hello! Welcome to Doraemon Movies Bot.**\n\n"
-        "Please select a movie from the list below to get the download link.",
+    # Ab hum text ki jagah photo bhejenge
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo=WELCOME_POSTER_URL,
+        caption=(
+            "👋 **Hello! Welcome to the Official Doraemon Movies Bot.**\n\n"
+            "Select any movie from the buttons below to get its download link instantly!"
+        ),
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
@@ -68,17 +72,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     query = update.callback_query
     await query.answer()
 
-    # Button ka data 'movie_0', 'movie_1', etc. se movie ka index nikalte hain
     movie_index = int(query.data.split('_')[1])
-    
-    # Sahi movie ka data list se uthate hain
     movie = MOVIES_DATA[movie_index]
     
-    # Movie ke liye keyboard (download button) banate hain
     keyboard = [[InlineKeyboardButton("✅ Download / Watch Now ✅", url=movie["link"])]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Poster ke saath message bhejte hain
+    # Yahan hum message ko edit nahi karenge, balki naya message bhejenge poster ke saath
+    # Pehle purana message (jisme buttons the) delete kar dete hain
+    await query.delete_message()
+
+    # Ab naya message poster ke saath bhejte hain
     await context.bot.send_photo(
         chat_id=query.message.chat_id,
         photo=movie["poster"],
@@ -97,7 +101,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    print("Doraemon Movies Bot is running with all the data!")
+    print("Doraemon Movies Bot (Professional Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
