@@ -44,6 +44,8 @@ def is_new_user(user_id):
 def add_user_to_db(user_id):
     if users_collection is not None and is_new_user(user_id):
         users_collection.insert_one({"user_id": user_id})
+        return True # True matlab naya user add hua
+    return False # False matlab user pehle se tha
 
 def get_all_user_ids():
     if users_collection is None: return []
@@ -77,8 +79,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     user_id = user.id
     
-    if is_new_user(user_id):
-        add_user_to_db(user_id)
+    if add_user_to_db(user_id): # Agar user naya hai aur add hua hai
         if ADMIN_ID:
             try:
                 first_name = user.first_name
@@ -100,7 +101,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             row.append(KeyboardButton(MOVIE_TITLES[i+1]))
         keyboard.append(row)
 
-    # AAPKA ORIGINAL WELCOME MESSAGE
     welcome_text = """
 👋 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁! 🎬💙
 
@@ -189,6 +189,42 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     total_users = len(get_all_user_ids())
     await update.message.reply_text(f"📊 **Bot Statistics**\n\nTotal Unique Users: **{total_users}**", parse_mode='Markdown')
 
+# NEW COMMAND: /import
+async def import_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if str(update.effective_user.id) != ADMIN_ID:
+        await update.message.reply_text("Sorry, this is an admin-only command.")
+        return
+    
+    ids_to_import = context.args
+    if not ids_to_import:
+        await update.message.reply_text("Please provide user IDs to import. Example: `/import 12345 67890`")
+        return
+    
+    added_count = 0
+    duplicate_count = 0
+    invalid_count = 0
+    
+    for user_id_str in ids_to_import:
+        try:
+            user_id = int(user_id_str)
+            if add_user_to_db(user_id):
+                added_count += 1
+            else:
+                duplicate_count += 1
+        except ValueError:
+            invalid_count += 1
+            
+    total_users = len(get_all_user_ids())
+    
+    await update.message.reply_text(
+        f"**Import Complete!**\n\n"
+        f"✅ **Added:** {added_count} new users\n"
+        f"🔄 **Duplicates (Ignored):** {duplicate_count}\n"
+        f"❌ **Invalid IDs:** {invalid_count}\n\n"
+        f"📊 **Total Users in DB now:** {total_users}",
+        parse_mode='Markdown'
+    )
+
 # ====================================================================
 # MAIN FUNCTION
 # ====================================================================
@@ -200,9 +236,10 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("stats", stats))
+    application.add_handler(CommandHandler("import", import_users)) # Naya command add kiya
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
     
-    print("DoreBox Bot (The REAL Final Version with MongoDB) is running!")
+    print("DoreBox Bot (The REAL Final Version with Import) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
