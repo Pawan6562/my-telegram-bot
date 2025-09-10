@@ -17,9 +17,24 @@ def keep_alive():
     t.start()
 # ---------------------------------------------------------
 
-# Secrets se Token aur Admin ID lena
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 ADMIN_ID = os.environ.get("ADMIN_ID")
+USER_FILE = "user_ids.txt" # Hamari "Guest Book" file ka naam
+
+# ====================================================================
+# GUEST BOOK FUNCTIONS: User ID ko save aur check karne ke liye
+# ====================================================================
+def load_user_ids():
+    """File se saare user IDs load karta hai."""
+    if not os.path.exists(USER_FILE):
+        return set()
+    with open(USER_FILE, "r") as f:
+        return set(line.strip() for line in f)
+
+def save_user_id(user_id):
+    """Naye user ki ID ko file mein save karta hai."""
+    with open(USER_FILE, "a") as f:
+        f.write(str(user_id) + "\n")
 
 # ====================================================================
 # YAHAN AAPKI SAARI MOVIES KA DATA HAI
@@ -43,33 +58,39 @@ MOVIES_DATA = [
 MOVIE_TITLES = [movie['title'] for movie in MOVIES_DATA]
 
 # ====================================================================
-# START COMMAND: Ab ye Admin ko notification bhi bhejega
+# START COMMAND: Ab ye smart ho gaya hai
 # ====================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
+    user_id_str = str(user.id)
+    
+    # "Guest Book" se saare purane user IDs load karo
+    known_user_ids = load_user_ids()
     
     # --- ADMIN NOTIFICATION PART ---
-    if ADMIN_ID:
-        try:
-            # User ki details nikaalo
-            user_id = user.id
-            first_name = user.first_name
-            username = f"@{user.username}" if user.username else "N/A"
-            
-            # Admin ko bhejne ke liye message banao
-            admin_message = (
-                f"🔔 **New User Alert!** 🔔\n\n"
-                f"**Name:** {first_name}\n"
-                f"**Username:** {username}\n"
-                f"**Telegram ID:** `{user_id}`"
-            )
-            # Admin ko message bhejo
-            await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, parse_mode='Markdown')
-        except Exception as e:
-            print(f"Admin ko notification bhejte waqt error aaya: {e}")
+    # Check karo ki user naya hai ya purana
+    if user_id_str not in known_user_ids:
+        # Agar user naya hai, to hi notification bhejo
+        if ADMIN_ID:
+            try:
+                first_name = user.first_name
+                username = f"@{user.username}" if user.username else "N/A"
+                admin_message = (
+                    f"🔔 **New User Alert!** 🔔\n\n"
+                    f"**Name:** {first_name}\n"
+                    f"**Username:** {username}\n"
+                    f"**Telegram ID:** `{user_id_str}`"
+                )
+                await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, parse_mode='Markdown')
+                
+                # Naye user ki ID ko "Guest Book" mein save kar do
+                save_user_id(user_id_str)
+                
+            except Exception as e:
+                print(f"Admin ko notification bhejte waqt error aaya: {e}")
     # -----------------------------
 
-    # User ko welcome message aur menu bhejo
+    # User ko welcome message aur menu bhejo (ye hamesha chalega)
     keyboard = []
     for i in range(0, len(MOVIE_TITLES), 2):
         row = [KeyboardButton(MOVIE_TITLES[i])]
@@ -133,7 +154,7 @@ def main():
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
-    print("DoreBox Bot (with Admin Notifications) is running!")
+    print("DoreBox Bot (Super Smart Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
