@@ -1,271 +1,212 @@
 import os
+import asyncio
 from threading import Thread
 from flask import Flask
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
-import asyncio
-from pymongo import MongoClient, errors
+from pymongo import MongoClient
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ParseMode
 
 # --- Flask App for UptimeRobot ---
 app = Flask('')
 @app.route('/')
 def home():
     return "I'm alive!"
+
 def run():
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
+
 def keep_alive():
     t = Thread(target=run)
     t.start()
-# -----------------------------------
+# ----------------------------------
 
-# --- Secrets and Database Connection ---
+# --- Environment Variables ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 ADMIN_ID = os.environ.get("ADMIN_ID")
 MONGO_URI = os.environ.get("MONGO_URI")
 
-# MongoDB se connect karo
-try:
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000) # Timeout add kiya
-    db = client.dorebox_bot
-    users_collection = db.users
-    # Test the connection
-    client.server_info() 
-    # Create a unique index to prevent duplicate user_ids
-    users_collection.create_index("user_id", unique=True)
-    print("MongoDB se successfully connect ho gaya.")
-except Exception as e:
-    print(f"MongoDB se connect nahi ho paaya. Error: {e}")
-    users_collection = None
+# --- Database Setup ---
+client = None
+db = None
+users_collection = None
 
-# ====================================================================
-# DATABASE FUNCTIONS (REBUILT FROM SCRATCH)
-# ====================================================================
-def add_user_to_db(user_id: int) -> bool:
-    """Adds a user to the database. Returns True if added, False if duplicate or error."""
-    if users_collection is None:
-        print("DB Error: Collection is None in add_user_to_db")
-        return False
+def setup_database():
+    global client, db, users_collection
     try:
-        users_collection.insert_one({'user_id': user_id})
+        client = MongoClient(MONGO_URI)
+        db = client.get_database()
+        # Check if 'dorebox_bot' is in the name, if not, get the default DB
+        if 'dorebox_bot' in MONGO_URI:
+            db = client.get_database('dorebox_bot')
+        else:
+            db = client.get_default_database()
+            
+        users_collection = db.users
+        print("✅ MongoDB se successfully connect ho gaya!")
         return True
-    except errors.DuplicateKeyError:
-        return False
     except Exception as e:
-        print(f"DB Error: User add karte waqt error aaya: {e}")
+        print(f"❌ MongoDB se connect nahi ho paaya. Error: {e}")
         return False
 
-def get_user_count() -> int:
-    """Gets the total number of users in the database."""
-    if users_collection is None:
-        print("DB Error: Collection is None in get_user_count")
-        return 0
-    try:
-        return users_collection.count_documents({})
-    except Exception as e:
-        print(f"DB Error: User count karte waqt error aaya: {e}")
-        return 0
-
-def get_all_user_ids() -> list:
-    """Gets a list of all user IDs."""
-    if users_collection is None:
-        print("DB Error: Collection is None in get_all_user_ids")
-        return []
-    try:
-        return [doc['user_id'] for doc in users_collection.find({}, {'_id': 0, 'user_id': 1})]
-    except Exception as e:
-        print(f"DB Error: User IDs laate waqt error aaya: {e}")
-        return []
-
-# ====================================================================
-# MOVIES DATA
-# ====================================================================
+# --- Movie Data ---
 MOVIES_DATA = [
-    {"title": "Jadoo Mantar aur Jhanoom", "poster": "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom"},
+    {"title": "Doraemon jadoo Mantar aur jhanoom", "poster": "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom"},
     {"title": "Dinosaur Yodha", "poster": "https://i.postimg.cc/3w83qTtr/Doraemon-The-Movie-Dinosaur-Yoddhha-Hindi-Tamil-Telugu-Download-FHD-990x557.jpg", "link": "https://dorebox.vercel.app/download.html?title=Dinosaur%20Yodha"},
-    {"title": "Underwater Adventure", "poster": "https://i.postimg.cc/yYLjw5Pn/Doraemon-The-Movie-Nobita.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20and%20the%20Underwater%20Adventure"},
+    {"title": "Doraemon The Movie Nobita and the Underwater Adventure", "poster": "https://i.postimg.cc/yYLjw5Pn/Doraemon-The-Movie-Nobita.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20and%20the%20Underwater%20Adventure"},
     {"title": "ICHI MERA DOST", "poster": "https://i.postimg.cc/xjpCppDL/Doraemon-The-Movie-Nobita-in-Ichi-Mera-Dost-Hindi.png", "link": "https://dorebox.vercel.app/download.html?title=ICHI%20MERA%20DOST"},
-    {"title": "Nobita's Dorabian Nights", "poster": "https://iili.io/KqRfWdv.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Dorabian%20Nights"},
+    {"title": "Doraemon Nobita's Dorabian Nights", "poster": "https://iili.io/KqRfWdv.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Dorabian%20Nights"},
     {"title": "Chronicle of the Moon", "poster": "https://i.postimg.cc/BbmtZs0X/m3.jpg", "link": "https://dorebox.vercel.app/download.html?title=Chronicle%20of%20the%20Moon"},
     {"title": "Sky Utopia", "poster": "https://i.postimg.cc/Nf3QTNXq/doraemon-movie-nobitas-sky-utopia-in-hindi.jpg", "link": "https://dorebox.vercel.app/download.html?title=Sky%20Utopia"},
     {"title": "Antarctic Adventure", "poster": "https://iili.io/Kx9Qifn.jpg", "link": "https://dorebox.vercel.app/download.html?title=Antarctic%20Adventure"},
     {"title": "Steel Troops – New Age", "poster": "https://i.postimg.cc/43C9KJr0/Doraemon-The-Movie-Nobita-and-the-Steel-Troops.jpg", "link": "https://dorebox.vercel.app/download.html?title=Steel%20Troops%20%E2%80%93%20New%20Age"},
     {"title": "Stand by Me – Part 2", "poster": "https://i.postimg.cc/y8wkR4PJ/Doraemon-The-Movie-Stand-by-Me-2-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%202"},
-    {"title": "Nobita's Treasure Island", "poster": "https://i.postimg.cc/t46rgZ36/Doraemon-the-Nobita-s-Treasure-Island-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Treasure%20Island"},
-    {"title": "The Explorer Bow Bow", "poster": "https://i.postimg.cc/HxY336f0/The-Movie-Nobita-The-Explorer-Bow-Bow-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20The%20Explorer%20Bow%20Bow"},
-    {"title": "Doraemon The Movie Nobita In Jannat No 1", "poster": "https://iili.io/KzFgEog.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20In%20Jannat%20No%201"},
+    {"title": "Doraemon Nobita's Treasure Island", "poster": "https://i.postimg.cc/t46rgZ36/Doraemon-the-Nobita-s-Treasure-Island-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Treasure%20Island"},
+    {"title": "Doraemon The Movie Nobita The Explorer Bow Bow", "poster": "https://i.postimg.cc/HxY336f0/The-Movie-Nobita-The-Explorer-Bow-Bow-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20The%20Explorer%20Bow%20Bow"},
+    {"title": "Doraemon The Movie Nobita In Jannat No 1", "poster": "https://iili.io/KzFgEog.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20In%20Jannat%20No%201"}
 ]
+MOVIE_TITLES = [movie["title"] for movie in MOVIES_DATA]
+MOVIE_DICT = {movie["title"]: movie for movie in MOVIES_DATA}
 
-MOVIE_TITLES = [movie['title'] for movie in MOVIES_DATA]
-
-# ====================================================================
-# START COMMAND
-# ====================================================================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# --- Bot Handlers ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     
-    if add_user_to_db(user_id):
+    # Check if user exists
+    if not users_collection.find_one({"user_id": user_id}):
+        # Add new user to DB
+        users_collection.insert_one({"user_id": user_id, "name": user.full_name, "username": user.username})
+        
+        # Notify Admin
         if ADMIN_ID:
             try:
-                first_name = user.first_name
-                username = f"@{user.username}" if user.username else "N/A"
                 admin_message = (
-                    f"🔔 **New User Alert!** 🔔\n\n"
-                    f"**Name:** {first_name}\n"
-                    f"**Username:** {username}\n"
-                    f"**Telegram ID:** `{user_id}`"
+                    f"🔔 New User Alert! 🔔\n\n"
+                    f"Name: {user.full_name}\n"
+                    f"Username: @{user.username if user.username else 'N/A'}\n"
+                    f"Telegram ID: `{user_id}`"
                 )
-                await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, parse_mode='Markdown')
+                await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, parse_mode=ParseMode.MARKDOWN)
             except Exception as e:
-                print(f"Admin ko notification bhejte waqt error aaya: {e}")
+                print(f"Admin ko notify nahi kar paaya. Error: {e}")
 
-    keyboard = []
-    for i in range(0, len(MOVIE_TITLES), 2):
-        row = [KeyboardButton(MOVIE_TITLES[i])]
-        if i + 1 < len(MOVIE_TITLES):
-            row.append(KeyboardButton(MOVIE_TITLES[i+1]))
-        keyboard.append(row)
+    # Build the keyboard
+    keyboard = [[title] for title in MOVIE_TITLES]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    welcome_text = """
-👋 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁! 🎬💙
-
-🚀 𝗬𝗮𝗵𝗮𝗮𝗻 𝗮𝗮𝗽𝗸𝗼 𝗺𝗶𝗹𝘁𝗶 𝗵𝗮𝗶𝗻 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗸𝗶 𝘀𝗮𝗯𝘀𝗲 𝘇𝗮𝗯𝗮𝗿𝗱𝗮𝘀𝘁 𝗺𝗼𝘃𝗶𝗲𝘀, 𝗯𝗶𝗹𝗸𝘂𝗹 𝗲𝗮𝘀𝘆 𝗮𝘂𝗿 𝗳𝗮𝘀𝘁 𝗱𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗸𝗲 𝘀𝗮𝗮𝘁𝗵।
-
-✨ 𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:
-🔹 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗛𝗶𝗻𝗱𝗶 𝗗𝘂𝗯𝗯𝗲𝗱 𝗠𝗼𝘃𝗶𝗲𝘀 (𝗢𝗹𝗱 + 𝗟𝗮𝘁𝗲𝘀𝘁)
-🔹 𝗠𝘂𝗹𝘁𝗶-𝗤𝘂𝗮𝗹𝗶𝘁𝘆 𝗗𝗼𝘄𝗻𝗹𝗼𝗮𝗱𝘀: 𝟭𝟬𝟴𝟬𝗽 | 𝟳𝟮𝟬𝗽 | 𝟯𝟲𝟬𝗽 🎥
-🔹 𝗗𝗶𝗿𝗲𝗰𝘁 & 𝗙𝗮𝘀𝘁 𝗟𝗶𝗻𝗸𝘀 – 𝗻𝗼 𝘁𝗶𝗺𝗲 𝘄𝗮𝘀𝘁𝗲!
-🔹 𝗥𝗲𝗴𝘂𝗹𝗮𝗿 𝗠𝗼𝘃𝗶𝗲 𝗨𝗽𝗱𝗮𝘁𝗲𝘀
-
-👉 𝗕𝗮𝘀 𝗺𝗼𝘃𝗶𝗲 𝗰𝗵𝗼𝗼𝘀𝗲 𝗸𝗶𝗷𝗶𝘆𝗲, 𝗮𝗽𝗻𝗶 𝗽𝗮𝘀𝗮𝗻𝗱 𝗸𝗶 𝗾𝘂𝗮𝗹𝗶𝘁𝘆 𝘀𝗲𝗹𝗲𝗰𝘁 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝘂𝗿 𝗲𝗻𝗷𝗼𝘆 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝗽𝗻𝗮 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲 𝗧𝗶𝗺𝗲! 🍿💙
-
-📢 𝗛𝗮𝗺𝗮𝗿𝗲 [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_all_movies_bycjh) 𝗰𝗵𝗮𝗻𝗻𝗲𝗹 𝗸𝗼 𝗷𝗼𝗶𝗻 𝗸𝗮𝗿𝗻𝗮 𝗻𝗮 𝗯𝗵𝗼𝗼𝗹𝗲𝗻, 𝘁𝗮𝗮𝗸𝗶 𝗻𝗲𝘄 𝘂𝗽𝗱𝗮𝘁𝗲𝘀 𝗮𝗮𝗽𝗸𝗼 𝘀𝗮𝗯𝘀𝗲 𝗽𝗲𝗵𝗹𝗲 𝗺𝗶𝗹𝘀𝗮𝗸𝗲𝗻! 🚀
-
-👇 *Neeche diye gaye menu se apni pasand ki movie select kijiye.*
-"""
-    
-    await update.message.reply_text(
-        welcome_text,
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
-        parse_mode='Markdown',
-        disable_web_page_preview=True
+    # Send welcome message
+    welcome_text = (
+        "👋 *𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁!* 🎬💙\n\n"
+        "🚀 𝗬𝗮𝗵𝗮𝗮𝗻 𝗮𝗮𝗽𝗸𝗼 𝗺𝗶𝗹𝘁𝗶 𝗵𝗮𝗶𝗻 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗸𝗶 𝘀𝗮𝗯𝘀𝗲 𝘇𝗮𝗯𝗮𝗿𝗱𝗮𝘀𝘁 𝗺𝗼𝘃𝗶𝗲𝘀, 𝗯𝗶𝗹𝗸𝘂𝗹 𝗲𝗮𝘀𝘆 𝗮𝘂𝗿 𝗳𝗮𝘀𝘁 𝗱𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗸𝗲 𝘀𝗮𝗮𝘁𝗵।\n\n"
+        "✨ *𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:*\n"
+        "🔹 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗛𝗶𝗻𝗱𝗶 𝗗𝘂𝗯𝗯𝗲𝗱 𝗠𝗼𝘃𝗶𝗲𝘀 (𝗢𝗹𝗱 + 𝗟𝗮𝘁𝗲𝘀𝘁)\n"
+        "🔹 𝗠𝘂𝗹𝘁𝗶-𝗤𝘂𝗮𝗹𝗶𝘁𝘆 𝗗𝗼𝘄𝗻𝗹𝗼𝗮𝗱𝘀: 𝟭𝟬𝟴𝟬𝗽 | 𝟳𝟮𝟬𝗽 | 𝟯𝟲𝟬𝗽 🎥\n"
+        "🔹 𝗗𝗶𝗿𝗲𝗰𝘁 & 𝗙𝗮𝘀𝘁 𝗟𝗶𝗻𝗸𝘀 – 𝗻𝗼 𝘁𝗶𝗺𝗲 𝘄𝗮𝘀𝘁𝗲!\n"
+        "🔹 𝗥𝗲𝗴𝘂𝗹𝗮𝗿 𝗠𝗼𝘃𝗶𝗲 𝗨𝗽𝗱𝗮𝘁𝗲𝘀\n\n"
+        "👉 *𝗕𝗮𝘀 𝗺𝗼𝘃𝗶𝗲 𝗰𝗵𝗼𝗼𝘀𝗲 𝗸𝗶𝗷𝗶𝘆𝗲, 𝗮𝗽𝗻𝗶 𝗽𝗮𝘀𝗮𝗻𝗱 𝗸𝗶 𝗾𝘂𝗮𝗹𝗶𝘁𝘆 𝘀𝗲𝗹𝗲𝗰𝘁 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝘂𝗿 𝗲𝗻𝗷𝗼𝘆 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝗽𝗻𝗮 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲 𝗧𝗶𝗺𝗲!* 🍿💙\n\n"
+        "📢 𝗛𝗮𝗺𝗮𝗿𝗲 [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_movies_hindi_dubbed) 𝗰𝗵𝗮𝗻𝗻𝗲𝗹 𝗸𝗼 𝗷𝗼𝗶𝗻 𝗸𝗮𝗿𝗻𝗮 𝗻𝗮 𝗯𝗵𝗼𝗼𝗹𝗲𝗻, 𝘁𝗮𝗮𝗸𝗶 𝗻𝗲𝘄 𝘂𝗽𝗱𝗮𝘁𝗲𝘀 𝗮𝗮𝗽𝗸𝗼 𝘀𝗮𝗯𝘀𝗲 𝗽𝗲𝗵𝗹𝗲 𝗺𝗶𝗹𝘀𝗮𝗸𝗲𝗻! 🚀\n\n"
+        "👇 *Neeche diye gaye menu se apni pasand ki movie select kijiye.*"
     )
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
-# ====================================================================
-# MOVIE HANDLER
-# ====================================================================
-async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     movie_title = update.message.text
-    selected_movie = next((movie for movie in MOVIES_DATA if movie['title'] == movie_title), None)
-    
-    if selected_movie:
-        keyboard = [[InlineKeyboardButton("✅ Download / Watch Now ✅", url=selected_movie["link"])]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=selected_movie["poster"],
-            caption=f"🎬 **{selected_movie['title']}**\n\nClick the button below to download the movie.",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
+    movie_data = MOVIE_DICT.get(movie_title)
+    if movie_data:
+        caption = f"🎬 **{movie_data['title']}**\n\n📥 Download from the button below!"
+        await update.message.reply_photo(
+            photo=movie_data['poster'],
+            caption=caption,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=Update.effective_message.reply_markup
         )
-    else:
-        await update.message.reply_text("Please select a valid movie from the menu below.")
 
-# ====================================================================
-# ADMIN COMMANDS
-# ====================================================================
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# --- Admin Commands ---
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(update.effective_user.id) != ADMIN_ID:
-        await update.message.reply_text("Sorry, this is an admin-only command.")
+        return
+    try:
+        total_users = users_collection.count_documents({})
+        await update.message.reply_text(f"📊 *Bot Statistics*\n\nTotal Unique Users: *{total_users}*", parse_mode=ParseMode.MARKDOWN)
+    except Exception as e:
+        await update.message.reply_text(f"Stats fetch karte waqt error: {e}")
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if str(update.effective_user.id) != ADMIN_ID:
+        return
+    
+    message_to_broadcast = " ".join(context.args)
+    if not message_to_broadcast:
+        await update.message.reply_text("Broadcast karne ke liye message likhein. Example: `/broadcast Hello everyone!`")
         return
 
-    message_to_send = " ".join(context.args)
-    if not message_to_send:
-        await update.message.reply_text("Please provide a message. Example: `/broadcast New movie added!`", parse_mode='Markdown')
-        return
-
-    user_ids = get_all_user_ids()
+    all_users = users_collection.find({}, {"user_id": 1})
+    user_ids = [user["user_id"] for user in all_users]
+    
     if not user_ids:
-        await update.message.reply_text("No users in the database to broadcast to.")
+        await update.message.reply_text("Database mein broadcast karne ke liye koi user nahi hai.")
         return
-        
-    await update.message.reply_text(f"Broadcast starting for {len(user_ids)} users...")
+
+    await update.message.reply_text(f"📢 Broadcast shuru ho raha hai {len(user_ids)} users ke liye...")
     
     success_count = 0
-    failure_count = 0
+    fail_count = 0
     for user_id in user_ids:
         try:
-            await context.bot.send_message(chat_id=user_id, text=message_to_send, parse_mode='Markdown')
+            await context.bot.send_message(chat_id=user_id, text=message_to_broadcast, parse_mode=ParseMode.MARKDOWN)
             success_count += 1
         except Exception:
-            failure_count += 1
+            fail_count += 1
         await asyncio.sleep(0.1)
 
-    await update.message.reply_text(
-        f"**Broadcast Complete!**\n\n✅ Sent to: {success_count} users\n❌ Failed for: {failure_count} users",
-        parse_mode='Markdown'
-    )
+    await update.message.reply_text(f"✅ Broadcast Complete!\n\nSuccessfully Sent: {success_count}\nFailed to Send: {fail_count}")
 
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def import_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(update.effective_user.id) != ADMIN_ID:
-        await update.message.reply_text("Sorry, this is an admin-only command.")
         return
-    
-    total_users = get_user_count()
-    await update.message.reply_text(f"📊 **Bot Statistics**\n\nTotal Unique Users: **{total_users}**", parse_mode='Markdown')
 
-async def import_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if str(update.effective_user.id) != ADMIN_ID:
-        await update.message.reply_text("Sorry, this is an admin-only command.")
+    if not context.args:
+        await update.message.reply_text("Import karne ke liye User IDs provide karein. Example: `/import 12345 67890`")
         return
-    
-    ids_to_import = context.args
-    if not ids_to_import:
-        await update.message.reply_text("Please provide user IDs to import. Example: `/import 12345 67890`")
-        return
-    
+
     added_count = 0
-    duplicate_count = 0
-    invalid_count = 0
-    
-    for user_id_str in ids_to_import:
+    for user_id_str in context.args:
         try:
             user_id = int(user_id_str)
-            if add_user_to_db(user_id):
-                added_count += 1
-            else:
-                duplicate_count += 1
-        except ValueError:
-            invalid_count += 1
-            
-    # CORRECTED: Get the total count AFTER the import is done
-    total_users_now = get_user_count()
+            # Simple insert, no duplicate check
+            users_collection.insert_one({"user_id": user_id, "name": "Imported User", "username": "N/A"})
+            added_count += 1
+        except Exception:
+            # This will catch duplicates and invalid IDs, but we just ignore
+            pass
     
+    total_users = users_collection.count_documents({})
     await update.message.reply_text(
-        f"**Import Complete!**\n\n"
-        f"✅ **Added:** {added_count} new users\n"
-        f"🔄 **Duplicates (Ignored):** {duplicate_count}\n"
-        f"❌ **Invalid IDs:** {invalid_count}\n\n"
-        f"📊 **Total Users in DB now:** {total_users_now}",
-        parse_mode='Markdown'
+        f"✅ Import Complete!\n\n"
+        f"Attempted to Add: {added_count} users.\n"
+        f"(Note: Duplicates might have been ignored by the database.)\n\n"
+        f"📊 Total Users in DB now: {total_users}"
     )
 
-# ====================================================================
-# MAIN FUNCTION
-# ====================================================================
+# --- Main Function ---
 def main():
     keep_alive()
     
+    if not setup_database():
+        print("Database setup fail ho gaya. Bot band ho raha hai.")
+        return
+
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("stats", stats))
+    application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("import", import_users))
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
     
-    print("DoreBox Bot (The Final Overhauled Version) is running!")
+    print("DoreBox Bot (Dumb Import Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
