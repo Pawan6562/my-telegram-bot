@@ -4,7 +4,7 @@ from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 import asyncio
-from pymongo import MongoClient
+from pymongo import MongoClient, errors
 
 # --- Flask App for UptimeRobot ---
 app = Flask('')
@@ -29,23 +29,26 @@ try:
     client = MongoClient(MONGO_URI)
     db = client.dorebox_bot
     users_collection = db.users
+    # Create a unique index to prevent duplicate user_ids
+    users_collection.create_index("user_id", unique=True)
     print("MongoDB se successfully connect ho gaya.")
 except Exception as e:
     print(f"MongoDB se connect nahi ho paaya. Error: {e}")
     users_collection = None
 
 # ====================================================================
-# DATABASE FUNCTIONS
+# DATABASE FUNCTIONS (Corrected and Robust)
 # ====================================================================
-def is_new_user(user_id):
-    if users_collection is None: return False
-    return users_collection.find_one({"user_id": user_id}) is None
-
 def add_user_to_db(user_id):
-    if users_collection is not None and is_new_user(user_id):
+    if users_collection is None:
+        return False # Database connected nahi hai
+    try:
+        # Naye user ko add karne ki koshish karo
         users_collection.insert_one({"user_id": user_id})
-        return True # True matlab naya user add hua
-    return False # False matlab user pehle se tha
+        return True  # True matlab naya user add hua
+    except errors.DuplicateKeyError:
+        # Agar user pehle se hai, to DuplicateKeyError aayega
+        return False # False matlab user pehle se tha
 
 def get_all_user_ids():
     if users_collection is None: return []
@@ -189,7 +192,6 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     total_users = len(get_all_user_ids())
     await update.message.reply_text(f"📊 **Bot Statistics**\n\nTotal Unique Users: **{total_users}**", parse_mode='Markdown')
 
-# NEW COMMAND: /import
 async def import_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if str(update.effective_user.id) != ADMIN_ID:
         await update.message.reply_text("Sorry, this is an admin-only command.")
@@ -236,10 +238,10 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("stats", stats))
-    application.add_handler(CommandHandler("import", import_users)) # Naya command add kiya
+    application.add_handler(CommandHandler("import", import_users))
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
     
-    print("DoreBox Bot (The REAL Final Version with Import) is running!")
+    print("DoreBox Bot (The REAL Final Corrected DB Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
