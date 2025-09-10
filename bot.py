@@ -195,9 +195,6 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 def main():
     keep_alive()
     
-    # Zaroori library install karna
-    os.system("pip install pymongo[srv]")
-    
     application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
