@@ -17,7 +17,9 @@ def keep_alive():
     t.start()
 # ---------------------------------------------------------
 
+# Secrets se Token aur Admin ID lena
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
+ADMIN_ID = os.environ.get("ADMIN_ID")
 
 # ====================================================================
 # YAHAN AAPKI SAARI MOVIES KA DATA HAI
@@ -35,18 +37,39 @@ MOVIES_DATA = [
     {"title": "Stand by Me – Part 2", "poster": "https://i.postimg.cc/y8wkR4PJ/Doraemon-The-Movie-Stand-by-Me-2-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%202"},
     {"title": "Nobita's Treasure Island", "poster": "https://i.postimg.cc/t46rgZ36/Doraemon-the-Nobita-s-Treasure-Island-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Treasure%20Island"},
     {"title": "The Explorer Bow Bow", "poster": "https://i.postimg.cc/HxY336f0/The-Movie-Nobita-The-Explorer-Bow-Bow-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20The%20Explorer%20Bow%20Bow"},
-    # --- YAHAN NAYI MOVIE ADD KI HAI ---
     {"title": "Doraemon The Movie Nobita In Jannat No 1", "poster": "https://iili.io/KzFgEog.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20In%20Jannat%20No%201"},
 ]
 
-# Movie titles ko ek alag list mein daal dete hain
 MOVIE_TITLES = [movie['title'] for movie in MOVIES_DATA]
 
 # ====================================================================
-# START COMMAND: Ab ye aapka original welcome message bhejega
+# START COMMAND: Ab ye Admin ko notification bhi bhejega
 # ====================================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Buttons ko 2-2 ki line mein arrange karte hain
+    user = update.effective_user
+    
+    # --- ADMIN NOTIFICATION PART ---
+    if ADMIN_ID:
+        try:
+            # User ki details nikaalo
+            user_id = user.id
+            first_name = user.first_name
+            username = f"@{user.username}" if user.username else "N/A"
+            
+            # Admin ko bhejne ke liye message banao
+            admin_message = (
+                f"🔔 **New User Alert!** 🔔\n\n"
+                f"**Name:** {first_name}\n"
+                f"**Username:** {username}\n"
+                f"**Telegram ID:** `{user_id}`"
+            )
+            # Admin ko message bhejo
+            await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, parse_mode='Markdown')
+        except Exception as e:
+            print(f"Admin ko notification bhejte waqt error aaya: {e}")
+    # -----------------------------
+
+    # User ko welcome message aur menu bhejo
     keyboard = []
     for i in range(0, len(MOVIE_TITLES), 2):
         row = [KeyboardButton(MOVIE_TITLES[i])]
@@ -54,7 +77,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             row.append(KeyboardButton(MOVIE_TITLES[i+1]))
         keyboard.append(row)
 
-    # Aapka original, detailed welcome message
     welcome_text = """
 👋 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁! 🎬💙
 
@@ -81,21 +103,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 # ====================================================================
-# MOVIE HANDLER: Jab user kisi movie ke naam par click karta hai
+# MOVIE HANDLER: Ismein koi change nahi hai
 # ====================================================================
 async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     movie_title = update.message.text
-    
     selected_movie = None
     for movie in MOVIES_DATA:
         if movie['title'] == movie_title:
             selected_movie = movie
             break
-    
     if selected_movie:
         keyboard = [[InlineKeyboardButton("✅ Download / Watch Now ✅", url=selected_movie["link"])]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
             photo=selected_movie["poster"],
@@ -112,15 +131,13 @@ async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 def main():
     keep_alive()
     application = Application.builder().token(TOKEN).build()
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
-    
-    print("DoreBox Bot (The Real Final Direct Menu Version) is running!")
+    print("DoreBox Bot (with Admin Notifications) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
-    if TOKEN is None:
-        print("Error: TELEGRAM_TOKEN environment variable not set!")
+    if TOKEN is None or ADMIN_ID is None:
+        print("Error: TELEGRAM_TOKEN ya ADMIN_ID environment variable set nahi hai!")
     else:
         main()
