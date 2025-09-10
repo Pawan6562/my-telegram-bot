@@ -3,6 +3,7 @@ from threading import Thread
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+import asyncio
 
 # --- Flask App for UptimeRobot (Isko nahi chhedna hai) ---
 app = Flask('')
@@ -63,14 +64,9 @@ MOVIE_TITLES = [movie['title'] for movie in MOVIES_DATA]
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     user_id_str = str(user.id)
-    
-    # "Guest Book" se saare purane user IDs load karo
     known_user_ids = load_user_ids()
     
-    # --- ADMIN NOTIFICATION PART ---
-    # Check karo ki user naya hai ya purana
     if user_id_str not in known_user_ids:
-        # Agar user naya hai, to hi notification bhejo
         if ADMIN_ID:
             try:
                 first_name = user.first_name
@@ -82,15 +78,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     f"**Telegram ID:** `{user_id_str}`"
                 )
                 await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, parse_mode='Markdown')
-                
-                # Naye user ki ID ko "Guest Book" mein save kar do
                 save_user_id(user_id_str)
-                
             except Exception as e:
                 print(f"Admin ko notification bhejte waqt error aaya: {e}")
-    # -----------------------------
 
-    # User ko welcome message aur menu bhejo (ye hamesha chalega)
     keyboard = []
     for i in range(0, len(MOVIE_TITLES), 2):
         row = [KeyboardButton(MOVIE_TITLES[i])]
@@ -100,19 +91,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     welcome_text = """
 👋 𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁! 🎬💙
-
-🚀 𝗬𝗮𝗵𝗮𝗮𝗻 𝗮𝗮𝗽𝗸𝗼 𝗺𝗶𝗹𝘁𝗶 𝗵𝗮𝗶𝗻 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗸𝗶 𝘀𝗮𝗯𝘀𝗲 𝘇𝗮𝗯𝗮𝗿𝗱𝗮𝘀𝘁 𝗺𝗼𝘃𝗶𝗲𝘀, 𝗯𝗶𝗹𝗸𝘂𝗹 𝗲𝗮𝘀𝘆 𝗮𝘂𝗿 𝗳𝗮𝘀𝘁 𝗱𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗸𝗲 𝘀𝗮𝗮𝘁𝗵।
-
-✨ 𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:
-🔹 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗛𝗶𝗻𝗱𝗶 𝗗𝘂𝗯𝗯𝗲𝗱 𝗠𝗼𝘃𝗶𝗲𝘀 (𝗢𝗹𝗱 + 𝗟𝗮𝘁𝗲𝘀𝘁)
-🔹 𝗠𝘂𝗹𝘁𝗶-𝗤𝘂𝗮𝗹𝗶𝘁𝘆 𝗗𝗼𝘄𝗻𝗹𝗼𝗮𝗱𝘀: 𝟭𝟬𝟴𝟬𝗽 | 𝟳𝟮𝟬𝗽 | 𝟯𝟲𝟬𝗽 🎥
-🔹 𝗗𝗶𝗿𝗲𝗰𝘁 & 𝗙𝗮𝘀𝘁 𝗟𝗶𝗻𝗸𝘀 – 𝗻𝗼 𝘁𝗶𝗺𝗲 𝘄𝗮𝘀𝘁𝗲!
-🔹 𝗥𝗲𝗴𝘂𝗹𝗮𝗿 𝗠𝗼𝘃𝗶𝗲 𝗨𝗽𝗱𝗮𝘁𝗲𝘀
-
-👉 𝗕𝗮𝘀 𝗺𝗼𝘃𝗶𝗲 𝗰𝗵𝗼𝗼𝘀𝗲 𝗸𝗶𝗷𝗶𝘆𝗲, 𝗮𝗽𝗻𝗶 𝗽𝗮𝘀𝗮𝗻𝗱 𝗸𝗶 𝗾𝘂𝗮𝗹𝗶𝘁𝘆 𝘀𝗲𝗹𝗲𝗰𝘁 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝘂𝗿 𝗲𝗻𝗷𝗼𝘆 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝗽𝗻𝗮 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲 𝗧𝗶𝗺𝗲! 🍿💙
-
-📢 𝗛𝗮𝗺𝗮𝗿𝗲 [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_all_movies_bycjh) 𝗰𝗵𝗮𝗻𝗻𝗲𝗹 𝗸𝗼 𝗷𝗼𝗶𝗻 𝗸𝗮𝗿𝗻𝗮 𝗻𝗮 𝗯𝗵𝗼𝗼𝗹𝗲𝗻, 𝘁𝗮𝗮𝗸𝗶 𝗻𝗲𝘄 𝘂𝗽𝗱𝗮𝘁𝗲𝘀 𝗮𝗮𝗽𝗸𝗼 𝘀𝗮𝗯𝘀𝗲 𝗽𝗲𝗵𝗹𝗲 𝗺𝗶𝗹𝘀𝗮𝗸𝗲𝗻! 🚀
-
+... (Aapka poora welcome message yahan aayega) ...
 👇 *Neeche diye gaye menu se apni pasand ki movie select kijiye.*
 """
     
@@ -147,14 +126,70 @@ async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("Please select a valid movie from the menu below.")
 
 # ====================================================================
-# MAIN FUNCTION (Isko nahi chhedna hai)
+# ADMIN COMMANDS: Sirf Admin ke liye
+# ====================================================================
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    # Pehle check karo ki command Admin bhej raha hai ya nahi
+    if str(user.id) != ADMIN_ID:
+        await update.message.reply_text("Sorry, this is an admin-only command.")
+        return
+
+    # Command se message ko alag karo
+    # Example: /broadcast Hello everyone -> message_to_send = "Hello everyone"
+    message_to_send = " ".join(context.args)
+    if not message_to_send:
+        await update.message.reply_text("Please provide a message to broadcast. \nExample: `/broadcast New movie added!`", parse_mode='Markdown')
+        return
+
+    # Saare users ko message bhejna shuru karo
+    user_ids = load_user_ids()
+    await update.message.reply_text(f"Broadcast starting for {len(user_ids)} users...")
+    
+    success_count = 0
+    failure_count = 0
+    for user_id in user_ids:
+        try:
+            await context.bot.send_message(chat_id=user_id, text=message_to_send, parse_mode='Markdown')
+            success_count += 1
+        except Exception as e:
+            failure_count += 1
+            print(f"ID {user_id} ko message nahi bhej paaye. Error: {e}")
+        await asyncio.sleep(0.1) # Thoda sa delay
+
+    # Admin ko final report bhejo
+    await update.message.reply_text(
+        f"**Broadcast Complete!**\n\n"
+        f"✅ Sent to: {success_count} users\n"
+        f"❌ Failed for: {failure_count} users"
+    , parse_mode='Markdown')
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    # Check karo ki command Admin bhej raha hai ya nahi
+    if str(user.id) != ADMIN_ID:
+        await update.message.reply_text("Sorry, this is an admin-only command.")
+        return
+    
+    user_ids = load_user_ids()
+    await update.message.reply_text(f"📊 **Bot Statistics**\n\nTotal Unique Users: **{len(user_ids)}**", parse_mode='Markdown')
+
+# ====================================================================
+# MAIN FUNCTION
 # ====================================================================
 def main():
     keep_alive()
     application = Application.builder().token(TOKEN).build()
+
+    # User handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
-    print("DoreBox Bot (Super Smart Version) is running!")
+    
+    # Admin handlers
+    application.add_handler(CommandHandler("broadcast", broadcast))
+    application.add_handler(CommandHandler("stats", stats))
+    
+    print("DoreBox Bot (with Broadcast Feature) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
