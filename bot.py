@@ -2,7 +2,7 @@ import os
 import asyncio
 from threading import Thread
 from flask import Flask
-from pymongo import MongoClient
+from pymongo import MongoClient, errors
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
@@ -36,14 +36,10 @@ def setup_database():
     global client, db, users_collection
     try:
         client = MongoClient(MONGO_URI)
-        db = client.get_database()
-        # Check if 'dorebox_bot' is in the name, if not, get the default DB
-        if 'dorebox_bot' in MONGO_URI:
-            db = client.get_database('dorebox_bot')
-        else:
-            db = client.get_default_database()
-            
+        db = client.get_database('dorebox_bot')
         users_collection = db.users
+        # Create a unique index on user_id to prevent duplicates at the database level
+        users_collection.create_index("user_id", unique=True)
         print("✅ MongoDB se successfully connect ho gaya!")
         return True
     except Exception as e:
@@ -74,14 +70,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     
-    # Check if user exists
-    if not users_collection.find_one({"user_id": user_id}):
-        # Add new user to DB
-        users_collection.insert_one({"user_id": user_id, "name": user.full_name, "username": user.username})
-        
-        # Notify Admin
-        if ADMIN_ID:
-            try:
+    try:
+        if not users_collection.find_one({"user_id": user_id}):
+            users_collection.insert_one({"user_id": user_id, "name": user.full_name, "username": user.username})
+            if ADMIN_ID:
                 admin_message = (
                     f"🔔 New User Alert! 🔔\n\n"
                     f"Name: {user.full_name}\n"
@@ -89,14 +81,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Telegram ID: `{user_id}`"
                 )
                 await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, parse_mode=ParseMode.MARKDOWN)
-            except Exception as e:
-                print(f"Admin ko notify nahi kar paaya. Error: {e}")
+    except Exception as e:
+        print(f"Start command mein user check karte waqt error: {e}")
 
-    # Build the keyboard
     keyboard = [[title] for title in MOVIE_TITLES]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    # Send welcome message
     welcome_text = (
         "👋 *𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁!* 🎬💙\n\n"
         "🚀 𝗬𝗮𝗵𝗮𝗮𝗻 𝗮𝗮𝗽𝗸𝗼 𝗺𝗶𝗹𝘁𝗶 𝗵𝗮𝗶𝗻 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗸𝗶 𝘀𝗮𝗯𝘀𝗲 𝘇𝗮𝗯𝗮𝗿𝗱𝗮𝘀𝘁 𝗺𝗼𝘃𝗶𝗲𝘀, 𝗯𝗶𝗹𝗸𝘂𝗹 𝗲𝗮𝘀𝘆 𝗮𝘂𝗿 𝗳𝗮𝘀𝘁 𝗱𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗸𝗲 𝘀𝗮𝗮𝘁𝗵।\n\n"
@@ -116,11 +106,11 @@ async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     movie_data = MOVIE_DICT.get(movie_title)
     if movie_data:
         caption = f"🎬 **{movie_data['title']}**\n\n📥 Download from the button below!"
+        # The faulty line is removed from here
         await update.message.reply_photo(
             photo=movie_data['poster'],
             caption=caption,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=Update.effective_message.reply_markup
+            parse_mode=ParseMode.MARKDOWN
         )
 
 # --- Admin Commands ---
@@ -171,22 +161,38 @@ async def import_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Import karne ke liye User IDs provide karein. Example: `/import 12345 67890`")
         return
 
-    added_count = 0
+    users_to_insert = []
     for user_id_str in context.args:
         try:
             user_id = int(user_id_str)
-            # Simple insert, no duplicate check
-            users_collection.insert_one({"user_id": user_id, "name": "Imported User", "username": "N/A"})
-            added_count += 1
-        except Exception:
-            # This will catch duplicates and invalid IDs, but we just ignore
+            users_to_insert.append({"user_id": user_id, "name": "Imported User", "username": "N/A"})
+        except ValueError:
             pass
     
+    added_count = 0
+    if users_to_insert:
+        try:
+            # This is the "dumb" part. It just tries to insert.
+            # The unique index in the DB will handle duplicates automatically.
+            users_collection.insert_many(users_to_insert, ordered=False)
+        except errors.BulkWriteError as bwe:
+            # This error happens when there are duplicates, which is OK.
+            # We count the successful inserts.
+            added_count = bwe.details['nInserted']
+        except Exception as e:
+            await update.message.reply_text(f"Database mein daalte waqt error: {e}")
+            return
+    
+    # If there were no duplicates, insert_many doesn't raise an error.
+    # So we need to get the count of what we tried to insert.
+    if added_count == 0 and users_to_insert:
+        added_count = len(users_to_insert)
+
     total_users = users_collection.count_documents({})
     await update.message.reply_text(
         f"✅ Import Complete!\n\n"
-        f"Attempted to Add: {added_count} users.\n"
-        f"(Note: Duplicates might have been ignored by the database.)\n\n"
+        f"Added: {added_count} new users.\n"
+        f"(Duplicates were automatically ignored by the database.)\n\n"
         f"📊 Total Users in DB now: {total_users}"
     )
 
@@ -206,7 +212,7 @@ def main():
     application.add_handler(CommandHandler("import", import_users))
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
     
-    print("DoreBox Bot (Dumb Import Version) is running!")
+    print("DoreBox Bot (The REAL, REAL, Dumb Import Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
