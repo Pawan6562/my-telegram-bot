@@ -26,9 +26,11 @@ MONGO_URI = os.environ.get("MONGO_URI")
 
 # MongoDB se connect karo
 try:
-    client = MongoClient(MONGO_URI)
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000) # Timeout add kiya
     db = client.dorebox_bot
     users_collection = db.users
+    # Test the connection
+    client.server_info() 
     # Create a unique index to prevent duplicate user_ids
     users_collection.create_index("user_id", unique=True)
     print("MongoDB se successfully connect ho gaya.")
@@ -37,22 +39,43 @@ except Exception as e:
     users_collection = None
 
 # ====================================================================
-# DATABASE FUNCTIONS (Corrected and Robust)
+# DATABASE FUNCTIONS (REBUILT FROM SCRATCH)
 # ====================================================================
-def add_user_to_db(user_id):
+def add_user_to_db(user_id: int) -> bool:
+    """Adds a user to the database. Returns True if added, False if duplicate or error."""
     if users_collection is None:
-        return False # Database connected nahi hai
+        print("DB Error: Collection is None in add_user_to_db")
+        return False
     try:
-        # Naye user ko add karne ki koshish karo
-        users_collection.insert_one({"user_id": user_id})
-        return True  # True matlab naya user add hua
+        users_collection.insert_one({'user_id': user_id})
+        return True
     except errors.DuplicateKeyError:
-        # Agar user pehle se hai, to DuplicateKeyError aayega
-        return False # False matlab user pehle se tha
+        return False
+    except Exception as e:
+        print(f"DB Error: User add karte waqt error aaya: {e}")
+        return False
 
-def get_all_user_ids():
-    if users_collection is None: return []
-    return [doc["user_id"] for doc in users_collection.find()]
+def get_user_count() -> int:
+    """Gets the total number of users in the database."""
+    if users_collection is None:
+        print("DB Error: Collection is None in get_user_count")
+        return 0
+    try:
+        return users_collection.count_documents({})
+    except Exception as e:
+        print(f"DB Error: User count karte waqt error aaya: {e}")
+        return 0
+
+def get_all_user_ids() -> list:
+    """Gets a list of all user IDs."""
+    if users_collection is None:
+        print("DB Error: Collection is None in get_all_user_ids")
+        return []
+    try:
+        return [doc['user_id'] for doc in users_collection.find({}, {'_id': 0, 'user_id': 1})]
+    except Exception as e:
+        print(f"DB Error: User IDs laate waqt error aaya: {e}")
+        return []
 
 # ====================================================================
 # MOVIES DATA
@@ -82,7 +105,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     user_id = user.id
     
-    if add_user_to_db(user_id): # Agar user naya hai aur add hua hai
+    if add_user_to_db(user_id):
         if ADMIN_ID:
             try:
                 first_name = user.first_name
@@ -189,7 +212,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Sorry, this is an admin-only command.")
         return
     
-    total_users = len(get_all_user_ids())
+    total_users = get_user_count()
     await update.message.reply_text(f"📊 **Bot Statistics**\n\nTotal Unique Users: **{total_users}**", parse_mode='Markdown')
 
 async def import_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -216,14 +239,15 @@ async def import_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         except ValueError:
             invalid_count += 1
             
-    total_users = len(get_all_user_ids())
+    # CORRECTED: Get the total count AFTER the import is done
+    total_users_now = get_user_count()
     
     await update.message.reply_text(
         f"**Import Complete!**\n\n"
         f"✅ **Added:** {added_count} new users\n"
         f"🔄 **Duplicates (Ignored):** {duplicate_count}\n"
         f"❌ **Invalid IDs:** {invalid_count}\n\n"
-        f"📊 **Total Users in DB now:** {total_users}",
+        f"📊 **Total Users in DB now:** {total_users_now}",
         parse_mode='Markdown'
     )
 
@@ -241,7 +265,7 @@ def main():
     application.add_handler(CommandHandler("import", import_users))
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
     
-    print("DoreBox Bot (The REAL Final Corrected DB Version) is running!")
+    print("DoreBox Bot (The Final Overhauled Version) is running!")
     application.run_polling()
 
 if __name__ == '__main__':
