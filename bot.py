@@ -30,13 +30,12 @@ def setup_database():
         print(f"❌ MongoDB se connect nahi ho paaya. Error: {e}")
         return False
 
-# --- Movie Data with Keywords ---
+# --- Movie Data with Keywords (LINK CORRECTED) ---
 MOVIES_DATA = [
-    # New Movie Added
     {
         "title": "Doraemon Nobita ke Teen Dristi Sheershiyon Wale Talwarbaaz",
         "poster": "https://i.postimg.cc/RZ82qxJ3/Doraemon-The-Movie-Nobita-s-Three-Magical-Swordsmen.png",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20ke%20Teen%20Dristi%20Sheershiyon%20Wale%20Talwarbaaz",
+        "link": "https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen", # <-- LINK ADDED HERE
         "keywords": ["three", "3", "teen", "visionary", "drishti", "dristi", "swordsmen", "swords", "talwarbaaz", "talwar", "sword", "teen swordsmen", "visionary swordsmen", "sword wali", "talwar wali"]
     },
     {
@@ -141,7 +140,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Exact title match handler
 async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     movie_title = update.message.text
-    # Find the movie data from the main list
     movie_data = next((movie for movie in MOVIES_DATA if movie['title'] == movie_title), None)
     if movie_data:
         caption = f"🎬 **{movie_data['title']}**\n\n📥 Download from the button below!"
@@ -171,7 +169,7 @@ async def keyword_search_handler(update: Update, context: ContextTypes.DEFAULT_T
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=reply_markup
                 )
-                return # Stop after finding the first match
+                return
 
 # --- Admin Commands (Same as before) ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -258,7 +256,6 @@ def main():
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
     
     # NEW: Handler for keyword search in any text message
-    # This should be one of the last handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, keyword_search_handler))
     
     print("✅ Bot polling shuru ho gaya hai...")
