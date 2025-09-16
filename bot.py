@@ -7,7 +7,7 @@ from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKe
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 
-# --- Environment Variables ---
+# --- Environment Variables (Render ke liye) ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 ADMIN_ID = os.environ.get("ADMIN_ID")
 MONGO_URI = os.environ.get("MONGO_URI")
@@ -30,12 +30,12 @@ def setup_database():
         print(f"❌ MongoDB se connect nahi ho paaya. Error: {e}")
         return False
 
-# --- Movie Data with Keywords (LINK CORRECTED) ---
+# --- Movie Data with Keywords ---
 MOVIES_DATA = [
     {
         "title": "Doraemon Nobita ke Teen Dristi Sheershiyon Wale Talwarbaaz",
         "poster": "https://i.postimg.cc/RZ82qxJ3/Doraemon-The-Movie-Nobita-s-Three-Magical-Swordsmen.png",
-        "link": "https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen", # <-- LINK ADDED HERE
+        "link": "https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen",
         "keywords": ["three", "3", "teen", "visionary", "drishti", "dristi", "swordsmen", "swords", "talwarbaaz", "talwar", "sword", "teen swordsmen", "visionary swordsmen", "sword wali", "talwar wali"]
     },
     {
@@ -72,7 +72,7 @@ MOVIES_DATA = [
         "title": "Doraemon Nobita Chala Chand Pe",
         "poster": "https://i.postimg.cc/BbmtZs0X/m3.jpg",
         "link": "https://dorebox.vercel.app/download.html?title=Chronicle%20of%20the%20Moon",
-        "keywords": ["chand", "chand pe", "chala chand", "chala chand pe", "moon", "moon exploration", "moon wali", "chronicle", "chronicle moon", "moon chronicle", "chand wali", "moon wali movie"]
+        "keywords": ["chaand", "chala", "challa", "chalaa", "chand", "chand pe", "chala chand", "chala chand pe", "moon", "moon exploration", "moon wali", "chronicle", "chronicle moon", "moon chronicle", "chand wali", "moon wali movie"]
     },
     {
         "title": "Doraemon Nobita Ka Aasmaani Utopia",
@@ -121,6 +121,70 @@ MOVIES_DATA = [
 MOVIE_TITLES = [movie["title"] for movie in MOVIES_DATA]
 
 # --- Bot Handlers ---
+
+# SPECIAL HANDLER for "Jadoo Mantar"
+async def send_jadoo_mantar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    caption = """
+🎬 Title: Doraemon Nobita – Jadoo Mantar Aur Jhanoom
+🗣️ Language: Hindi / Urdu Dubbed
+💎 Quality: 1080p FHD
+
+📥 Watch & Download Now
+🔹 Main Channel: [CARTOON JUNCTION HINDI](https://t.me/cartoon_junction_hindi)
+🔹 Movies Channel: [All Doraemon Movies](https://t.me/doraemon_all_movies_bycjh)
+🔹 Movies Bot: @doraemonmovies_by_cjh_bot
+🔹 Official Website: dorebox.vercel.app
+
+✨ Tip: Subscribe to stay ahead of every new adventure! ✨
+
+⚠️ Disclaimer: We are not the owners of this content. It is already freely available on the internet—we simply share it here for fans.
+"""
+    keyboard = [[InlineKeyboardButton("🎬 Watch & Download", url="https://voe.sx/e/jb8n6abxke5j")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_photo(
+        photo="https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg",
+        caption=caption,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=reply_markup
+    )
+
+# REGULAR HANDLER for all other movies
+async def send_regular_movie(update: Update, movie_data: dict):
+    caption = f"🎬 **{movie_data['title']}**\n\n📥 Download from the button below!"
+    keyboard = [[InlineKeyboardButton("📥 Download Now", url=movie_data['link'])]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_photo(
+        photo=movie_data['poster'],
+        caption=caption,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=reply_markup
+    )
+
+# Main handler that decides which function to call
+async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    movie_title = update.message.text
+    
+    if movie_title == "Doraemon Jadoo Mantar Aur Jahnoom":
+        await send_jadoo_mantar(update, context)
+    else:
+        movie_data = next((movie for movie in MOVIES_DATA if movie['title'] == movie_title), None)
+        if movie_data:
+            await send_regular_movie(update, movie_data)
+
+# Keyword search handler that decides which function to call
+async def keyword_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_message = update.message.text.lower()
+
+    for movie in MOVIES_DATA:
+        for keyword in movie.get("keywords", []):
+            if keyword.lower() in user_message:
+                if movie['title'] == "Doraemon Jadoo Mantar Aur Jahnoom":
+                    await send_jadoo_mantar(update, context)
+                else:
+                    await send_regular_movie(update, movie)
+                return
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
@@ -136,40 +200,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     welcome_text = ("👋 *𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁!* 🎬💙\n\n🚀 𝗬𝗮𝗵𝗮𝗮𝗻 𝗮𝗮𝗽𝗸𝗼 𝗺𝗶𝗹𝘁𝗶 𝗵𝗮𝗶𝗻 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗸𝗶 𝘀𝗮𝗯𝘀𝗲 𝘇𝗮𝗯𝗮𝗿𝗱𝗮𝘀𝘁 𝗺𝗼𝘃𝗶𝗲𝘀, 𝗯𝗶𝗹𝗸𝘂𝗹 𝗲𝗮𝘀𝘆 𝗮𝘂𝗿 𝗳𝗮𝘀𝘁 𝗱𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗸𝗲 𝘀𝗮𝗮𝘁𝗵।\n\n✨ *𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:*\n🔹 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗛𝗶𝗻𝗱𝗶 𝗗𝘂𝗯𝗯𝗲𝗱 𝗠𝗼𝘃𝗶𝗲𝘀 (𝗢𝗹𝗱 + 𝗟𝗮𝘁𝗲𝘀𝘁)\n🔹 𝗠𝘂𝗹𝘁𝗶-𝗤𝘂𝗮𝗹𝗶𝘁𝘆 𝗗𝗼𝘄𝗻𝗹𝗼𝗮𝗱𝘀: 𝟭𝟬𝟴𝟬𝗽 | 𝟳𝟮𝟬𝗽 | 𝟯𝟲𝟬𝗽 🎥\n🔹 𝗗𝗶𝗿𝗲𝗰𝘁 & 𝗙𝗮𝘀𝘁 𝗟𝗶𝗻𝗸𝘀 – 𝗻𝗼 𝘁𝗶𝗺𝗲 𝘄𝗮𝘀𝘁𝗲!\n🔹 𝗥𝗲𝗴𝘂𝗹𝗮𝗿 𝗠𝗼𝘃𝗶𝗲 𝗨𝗽𝗱𝗮𝘁𝗲𝘀\n\n👉 *𝗕𝗮𝘀 𝗺𝗼𝘃𝗶𝗲 𝗰𝗵𝗼𝗼𝘀𝗲 𝗸𝗶𝗷𝗶𝘆𝗲, 𝗮𝗽𝗻𝗶 𝗽𝗮𝘀𝗮𝗻𝗱 𝗸𝗶 𝗾𝘂𝗮𝗹𝗶𝘁𝘆 𝘀𝗲𝗹𝗲𝗰𝘁 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝘂𝗿 𝗲𝗻𝗷𝗼𝘆 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝗽𝗻𝗮 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲 𝗧𝗶𝗺𝗲!* 🍿💙\n\n📢 𝗛𝗮𝗺𝗮𝗿𝗲 [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_movies_hindi_dubbed) 𝗰𝗵𝗮𝗻𝗻𝗲𝗹 𝗸𝗼 𝗷𝗼𝗶𝗻 𝗸𝗮𝗿𝗻𝗮 𝗻𝗮 𝗯𝗵𝗼𝗼𝗹𝗲𝗻, 𝘁𝗮𝗮𝗸𝗶 𝗻𝗲𝘄 𝘂𝗽𝗱𝗮𝘁𝗲𝘀 𝗮𝗮𝗽𝗸𝗼 𝘀𝗮𝗯𝘀𝗲 𝗽𝗲𝗵𝗹𝗲 𝗺𝗶𝗹𝘀𝗮𝗸𝗲𝗻! 🚀\n\n👇 *Neeche diye gaye menu se apni pasand ki movie select kijiye.*")
     await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
-
-# Exact title match handler
-async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    movie_title = update.message.text
-    movie_data = next((movie for movie in MOVIES_DATA if movie['title'] == movie_title), None)
-    if movie_data:
-        caption = f"🎬 **{movie_data['title']}**\n\n📥 Download from the button below!"
-        keyboard = [[InlineKeyboardButton("📥 Download Now", url=movie_data['link'])]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_photo(
-            photo=movie_data['poster'],
-            caption=caption,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=reply_markup
-        )
-
-# --- NEW: Keyword Search Handler ---
-async def keyword_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text.lower()
-    
-    for movie in MOVIES_DATA:
-        for keyword in movie.get("keywords", []):
-            if keyword.lower() in user_message:
-                caption = f"🎬 **{movie['title']}**\n\n🔎 Mujhe lagta hai aap yeh movie dhoondh rahe the!"
-                keyboard = [[InlineKeyboardButton("📥 Download Now", url=movie['link'])]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await update.message.reply_photo(
-                    photo=movie['poster'],
-                    caption=caption,
-                    parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=reply_markup
-                )
-                return
 
 # --- Admin Commands (Same as before) ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -251,13 +281,13 @@ def main():
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("import", import_users))
-    
+
     # Handler for exact movie titles from the keyboard
     application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
-    
+
     # NEW: Handler for keyword search in any text message
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, keyword_search_handler))
-    
+
     print("✅ Bot polling shuru ho gaya hai...")
     application.run_polling()
 
