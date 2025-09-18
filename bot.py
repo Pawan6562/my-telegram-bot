@@ -222,9 +222,7 @@ async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def keyword_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.lower()
     
-    # Har movie ke liye, uske keywords ka ek set banao aur check karo
     for movie in MOVIES_DATA:
-        # Check if any of the movie's keywords are in the user's message
         if any(keyword.lower() in user_message for keyword in movie.get("keywords", [])):
             caption = f"🎬 **{movie['title']}**\n\n🔎 Mujhe lagta hai aap yeh movie dhoondh rahe the!"
             keyboard = [[InlineKeyboardButton("📥 Download Now", url=movie['link'])]]
@@ -236,7 +234,7 @@ async def keyword_search_handler(update: Update, context: ContextTypes.DEFAULT_T
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=reply_markup
             )
-            return # Jaise hi movie mile, function ko rok do
+            return
 
 # --- Admin Commands (Same as before) ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -306,4 +304,21 @@ def main():
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("import", import_users))
-    application.add_handler(MessageHandler(filters.Text(MOVIE_
+    application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, keyword_search_handler))
+
+    # 2. Bot ko ek alag thread mein chalao
+    bot_thread = Thread(target=application.run_polling)
+    bot_thread.start()
+    print("✅ Bot polling shuru ho gaya hai...")
+
+    # 3. Flask server ko main thread mein chalao (sabse aakhir mein)
+    port = int(os.environ.get('PORT', 8080))
+    print(f"✅ Flask server port {port} par shuru ho raha hai...")
+    app.run(host='0.0.0.0', port=port)
+
+if __name__ == '__main__':
+    if not all([TOKEN, ADMIN_ID, MONGO_URI]):
+        print("❌ Error: Zaroori environment variables (TOKEN, ADMIN_ID, MONGO_URI) set nahi hain!")
+    else:
+        main()
