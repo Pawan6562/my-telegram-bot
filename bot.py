@@ -180,6 +180,12 @@ MOVIES_DATA = [
 
 MOVIE_TITLES = [movie["title"] for movie in MOVIES_DATA]
 
+# --- Flask App (For Render Web Service) ---
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Bot is alive and running!"
+
 # --- Bot Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -286,21 +292,35 @@ async def import_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_users = users_collection.count_documents({})
     await update.message.reply_text(f"✅ Import Complete!\n\nAdded: {added_count} new users.\n(Duplicates were ignored.)\n\n📊 Total Users in DB now: {total_users}")
 
-# --- Flask App (For Render Web Service) ---
-app = Flask(__name__)
-@app.route('/')
-def home():
-    return "Bot is alive and running!"
-
-def run_flask():
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
-
 # --- Main Bot Function ---
 def main():
     if not setup_database():
         print("❌ Database setup fail ho gaya. Bot band ho raha hai.")
         return
 
-    flask_thread = Thread(target=run_flask)
-    flask_thread.start()
+    # 1. Bot ko setup karo
+    application = Application.builder().token(TOKEN).build()
+
+    # Handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("stats", stats))
+    application.add_handler(CommandHandler("broadcast", broadcast))
+    application.add_handler(CommandHandler("import", import_users))
+    application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, keyword_search_handler))
+
+    # 2. Bot ko ek alag thread mein chalao
+    bot_thread = Thread(target=application.run_polling)
+    bot_thread.start()
+    print("✅ Bot polling shuru ho gaya hai...")
+
+    # 3. Flask server ko main thread mein chalao (sabse aakhir mein)
+    port = int(os.environ.get('PORT', 8080))
+    print(f"✅ Flask server port {port} par shuru ho raha hai...")
+    app.run(host='0.0.0.0', port=port)
+
+if __name__ == '__main__':
+    if not all([TOKEN, ADMIN_ID, MONGO_URI]):
+        print("❌ Error: Zaroori environment variables (TOKEN, ADMIN_ID, MONGO_URI) set nahi hain!")
+    else:
+        main()
