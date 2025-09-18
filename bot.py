@@ -30,7 +30,7 @@ def setup_database():
         print(f"❌ MongoDB se connect nahi ho paaya. Error: {e}")
         return False
 
-# --- Movie Data with Keywords ---
+# --- Movie Data with Keywords (23 MOVIES TOTAL) ---
 MOVIES_DATA = [
     {
         "title": "Doraemon Nobita ke Teen Dristi Sheershiyon Wale Talwarbaaz",
@@ -93,6 +93,12 @@ MOVIES_DATA = [
         "keywords": ["steel", "steel troop", "steel troops", "trops", "robot", "robo", "robotic", "wing", "wings", "winged", "winged angel", "angels", "steel wali", "robot wali", "troop wali", "angel wali"]
     },
     {
+        "title": "Stand by Me Doraemon",
+        "poster": "https://i.postimg.cc/vmkLDN1X/Doraemon-The-Movie-Stand-by-Me-by-cjh.png",
+        "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%201",
+        "keywords": ["stand by me", "stand byme", "standby me", "standbyme", "stand 1", "part 1", "first part", "1st part", "stand wali", "3d wali", "3d movie", "doraemon stand", "stand movie"]
+    },
+    {
         "title": "Stand by Me Doraemon 2",
         "poster": "https://i.postimg.cc/y8wkR4PJ/Doraemon-The-Movie-Stand-by-Me-2-by-cjh.png",
         "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%202",
@@ -115,6 +121,54 @@ MOVIES_DATA = [
         "poster": "https://iili.io/KzFgEog.png",
         "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20In%20Jannat%20No%201",
         "keywords": ["jannat", "jannat no 1", "jannat no ek", "jannat1", "heaven", "no1", "number 1", "first", "jannat wali", "no1 wali", "heaven wali", "nobita jannat", "nobita wali"]
+    },
+    {
+        "title": "Doraemon Nobita and the Birth of Japan",
+        "poster": "https://i.postimg.cc/MKqNrP7Q/Doraemon-The-Movie-Nobita-and-the-birth-of-Japan.jpg",
+        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20nobita%20and%20the%20Birthday%20of%20japan",
+        "keywords": ["birth of japan", "birthday of japan", "janam japan", "janm japan", "japan", "japanese", "japan wali", "janam wali", "janm wali", "janam japan movie", "birth wali", "japan birth", "japan movie"]
+    },
+    {
+        "title": "Doraemon Nobita and the Galaxy Super Express",
+        "poster": "https://i.postimg.cc/XY6fQ25Z/Doraemon-The-Movie-Galaxy-Super-Express-by-cjh.png",
+        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Galaxy%20Super%20Express%20Hindi",
+        "keywords": ["galaxy super express", "galaxy express", "galaxy train", "super express doraemon", "galaxy wali movie", "train space movie", "space train", "galaxy wali doraemon", "super express wali", "galaxy express movie"]
+    },
+    {
+        "title": "Doraemon: Nobita’s Great Adventure to the South Seas",
+        "poster": "https://i.postimg.cc/8zC06x5V/Nobita-Great-Adventure-to-the-South-Seas-by-cjh.jpg",
+        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Great%20Adventure%20in%20the%20South%20Seas",
+        "keywords": ["south seas", "south sea", "south see", "south c", "souths", "south", "great adventure", "great adventures", "grate adventure", "samundar", "samundar wali", "samundar ka", "samandar", "pirates", "samundari", "sea adventure", "samundar adventure", "doraemon south sea", "doraemon south seas"]
+    },
+    {
+        "title": "Doraemon Nobita Aur Jadooi Tapu",
+        "poster": "https://i.postimg.cc/yd8X0kZv/Doraemon-The-Movie-Nobita-Aur-Jadooi-Tapu-by-cjh.jpg",
+        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Island%20of%20Miracle",
+        "keywords": ["jadooi tapu", "jadoi tapu", "jadui tapu", "jadui island", "magic island", "jadui adventure", "jadoo tapu", "magic tapu", "jadui doraemon", "magic wali movie", "island magic", "tapu movie"]
+    },
+    {
+        "title": "Doraemon Yeh Bhi Tha Nobita Woh Bhi Tha Nobita",
+        "poster": "https://i.postimg.cc/mrQ7v7Qd/Doraemon-nobita-and-the-legend-of-sun-king-by-cjh.jpg",
+        "link": "https://dorebox.vercel.app/download.html?title=Legend%20of%20Sun%20King",
+        "keywords": ["yeh bhi nobita", "woh bhi nobita", "yeh nobita", "wo nobita", "ye nobita", "wo bhi nobita", "nobita double", "two nobita", "twin nobita", "do nobita", "nobita twins", "double nobita movie"]
+    },
+    {
+        "title": "Doraemon Toofani Adventure",
+        "poster": "https://i.postimg.cc/bYFLHHLb/Doraemon-Toofani-Adventure-by-cjh.jpg",
+        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Windmasters",
+        "keywords": ["toofani adventure", "tofani adventure", "tufani adventure", "tufan adventure", "storm adventure", "hawa adventure", "aandhi adventure", "toofan movie", "tufani movie", "storm wali movie"]
+    },
+    {
+        "title": "Doraemon Nobita Bana Superhero",
+        "poster": "https://i.postimg.cc/prbYFGHC/Doraemon-Nobita-Bana-Superhero-Hindi-by-cjh.jpg",
+        "link": "https://dorebox.vercel.app/download.html?title=Parallel%20Visit%20to%20West",
+        "keywords": ["bana superhero", "super hero", "superhero", "nobita superhero", "super hero movie", "hero movie", "nobita hero", "hero wala movie", "superhero wala movie"]
+    },
+    {
+        "title": "Doraemon Nobita and the Kingdom of Robot Singham",
+        "poster": "https://i.postimg.cc/j5fNHPj6/The-Movie-Nobita-and-the-Kingdom-of-Robot-by-cjh.jpg",
+        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20And%20The%20Kingdom%20Of%20Robot%20Singham",
+        "keywords": ["robot singham", "robot kingdom", "robo singham", "robo kingdom", "robot movie", "robot wali movie", "robot adventure", "robo adventure", "robot raj", "robot king", "robo king"]
     }
 ]
 
@@ -141,7 +195,7 @@ async def send_jadoo_mantar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     keyboard = [[InlineKeyboardButton("🎬 Watch & Download", url="https://voe.sx/e/jb8n6abxke5j")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+
     await update.message.reply_photo(
         photo="https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg",
         caption=caption,
@@ -164,7 +218,7 @@ async def send_regular_movie(update: Update, movie_data: dict):
 # Main handler that decides which function to call
 async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     movie_title = update.message.text
-    
+
     if movie_title == "Doraemon Jadoo Mantar Aur Jahnoom":
         await send_jadoo_mantar(update, context)
     else:
