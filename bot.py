@@ -30,7 +30,7 @@ def setup_database():
         print(f"❌ MongoDB se connect nahi ho paaya. Error: {e}")
         return False
 
-# --- Movie Data with Keywords (25 MOVIES TOTAL) ---
+# --- Movie Data with Keywords (24 MOVIES TOTAL - CORRECTED & MERGED) ---
 MOVIES_DATA = [
     {
         "title": "Doraemon Nobita ke Teen Dristi Sheershiyon Wale Talwarbaaz",
@@ -57,10 +57,10 @@ MOVIES_DATA = [
         "keywords": ["underwater", "under water", "undersea", "sea", "samundar", "adventure", "devil", "undersea devil", "samundar wali", "sea wali", "underwater wali", "under water wali"]
     },
     {
-        "title": "Doraemon Ichi Mera Dost",
-        "poster": "https://i.postimg.cc/xjpCppDL/Doraemon-The-Movie-Nobita-in-Ichi-Mera-Dost-Hindi.png",
-        "link": "https://dorebox.vercel.app/download.html?title=ICHI%20MERA%20DOST",
-        "keywords": ["ichi", "icchi", "ichhi", "mera dost", "dost", "dost wali", "dost wali movie", "ichi dost", "ichi wali"]
+        "title": "Doraemon Ichi Mera Dost (Yeh Bhi Tha Nobita)",
+        "poster": "https://i.postimg.cc/mrQ7v7Qd/Doraemon-nobita-and-the-legend-of-sun-king-by-cjh.jpg",
+        "link": "https://dorebox.vercel.app/download.html?title=Legend%20of%20Sun%20King",
+        "keywords": ["ichi", "icchi", "ichhi", "mera dost", "dost", "dost wali", "ichi dost", "ichi wali", "yeh bhi nobita", "woh bhi nobita", "yeh nobita", "wo nobita", "ye nobita", "wo bhi nobita", "nobita double", "two nobita", "twin nobita", "do nobita", "nobita twins", "double nobita movie", "sun king", "legend of sun king"]
     },
     {
         "title": "Doraemon Nobita Dorabian Nights",
@@ -147,12 +147,6 @@ MOVIES_DATA = [
         "keywords": ["jadooi tapu", "jadoi tapu", "jadui tapu", "jadui island", "magic island", "jadui adventure", "jadoo tapu", "magic tapu", "jadui doraemon", "magic wali movie", "island magic", "tapu movie"]
     },
     {
-        "title": "Doraemon Yeh Bhi Tha Nobita Woh Bhi Tha Nobita",
-        "poster": "https://i.postimg.cc/mrQ7v7Qd/Doraemon-nobita-and-the-legend-of-sun-king-by-cjh.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Legend%20of%20Sun%20King",
-        "keywords": ["yeh bhi nobita", "woh bhi nobita", "yeh nobita", "wo nobita", "ye nobita", "wo bhi nobita", "nobita double", "two nobita", "twin nobita", "do nobita", "nobita twins", "double nobita movie"]
-    },
-    {
         "title": "Doraemon Toofani Adventure",
         "poster": "https://i.postimg.cc/bYFLHHLb/Doraemon-Toofani-Adventure-by-cjh.jpg",
         "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Windmasters",
@@ -218,24 +212,25 @@ async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
-# Keyword Search Handler
+# --- NEW: Optimized Keyword Search Handler ---
 async def keyword_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.lower()
-
+    
+    # Har movie ke liye, uske keywords ka ek set banao aur check karo
     for movie in MOVIES_DATA:
-        for keyword in movie.get("keywords", []):
-            if keyword.lower() in user_message:
-                caption = f"🎬 **{movie['title']}**\n\n🔎 Mujhe lagta hai aap yeh movie dhoondh rahe the!"
-                keyboard = [[InlineKeyboardButton("📥 Download Now", url=movie['link'])]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+        # Check if any of the movie's keywords are in the user's message
+        if any(keyword.lower() in user_message for keyword in movie.get("keywords", [])):
+            caption = f"🎬 **{movie['title']}**\n\n🔎 Mujhe lagta hai aap yeh movie dhoondh rahe the!"
+            keyboard = [[InlineKeyboardButton("📥 Download Now", url=movie['link'])]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
-                await update.message.reply_photo(
-                    photo=movie['poster'],
-                    caption=caption,
-                    parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=reply_markup
-                )
-                return
+            await update.message.reply_photo(
+                photo=movie['poster'],
+                caption=caption,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
+            )
+            return # Jaise hi movie mile, function ko rok do
 
 # --- Admin Commands (Same as before) ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -309,26 +304,3 @@ def main():
 
     flask_thread = Thread(target=run_flask)
     flask_thread.start()
-
-    application = Application.builder().token(TOKEN).build()
-
-    # Handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("stats", stats))
-    application.add_handler(CommandHandler("broadcast", broadcast))
-    application.add_handler(CommandHandler("import", import_users))
-
-    # Handler for exact movie titles from the keyboard
-    application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
-
-    # Handler for keyword search in any text message
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, keyword_search_handler))
-
-    print("✅ Bot polling shuru ho gaya hai...")
-    application.run_polling()
-
-if __name__ == '__main__':
-    if not all([TOKEN, ADMIN_ID, MONGO_URI]):
-        print("❌ Error: Zaroori environment variables (TOKEN, ADMIN_ID, MONGO_URI) set nahi hain!")
-    else:
-        main()
