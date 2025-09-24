@@ -1,376 +1,253 @@
 import os
 import logging
-import asyncio
-from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, render_template_string
-from pymongo import MongoClient, errors
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from telegram.constants import ParseMode
+from flask import Flask, request, jsonify
 import requests
 from threading import Thread
 import json
+import time
 
-# Configure logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# Simple logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Environment variables
+# Get environment variables
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-ADMIN_ID = os.environ.get("ADMIN_ID")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-MONGO_URI = os.environ.get("MONGO_URI")
 
-if not TOKEN:
-    logger.error("TELEGRAM_TOKEN not found!")
-    exit(1)
+# Movie data (hardcoded - no database issues)
+MOVIES = [
+    {
+        "title": "Doraemon Three Swordsmen",
+        "poster": "https://i.postimg.cc/RZ82qxJ3/Doraemon-The-Movie-Nobita-s-Three-Magical-Swordsmen.png",
+        "link": "https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen"
+    },
+    {
+        "title": "Doraemon Jadoo Mantar",
+        "poster": "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg",
+        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom"
+    },
+    {
+        "title": "Stand by Me Doraemon",
+        "poster": "https://i.postimg.cc/vmkLDN1X/Doraemon-The-Movie-Stand-by-Me-by-cjh.png",
+        "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%201"
+    }
+]
 
-if not MONGO_URI:
-    logger.error("MONGO_URI not found!")
-    exit(1)
-
-# Database setup
-client = None
-db = None
-users_collection = None
-analytics_collection = None
-movies_collection = None
-
-def setup_database():
-    """Setup MongoDB connection and collections."""
-    global client, db, users_collection, analytics_collection, movies_collection
-    try:
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-        # Test connection
-        client.server_info()
-        
-        db = client.get_database('dorebox_bot')
-        users_collection = db.users
-        analytics_collection = db.analytics
-        movies_collection = db.movies
-        
-        # Create indexes
-        users_collection.create_index("user_id", unique=True)
-        analytics_collection.create_index("timestamp")
-        movies_collection.create_index("title", unique=True)
-        
-        # Initialize movies data if empty
-        if movies_collection.count_documents({}) == 0:
-            initialize_movies_data()
-        
-        logger.info("✅ MongoDB connected successfully!")
-        return True
-    except Exception as e:
-        logger.error(f"❌ MongoDB connection failed: {e}")
-        return False
-
-def initialize_movies_data():
-    """Initialize movies collection with data."""
-    movies_data = [
-        {
-            "title": "Doraemon Nobita ke Teen Dristi Sheershiyon Wale Talwarbaaz",
-            "poster": "https://i.postimg.cc/RZ82qxJ3/Doraemon-The-Movie-Nobita-s-Three-Magical-Swordsmen.png",
-            "link": "https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen",
-            "keywords": ["three", "3", "teen", "visionary", "drishti", "swordsmen", "talwar"],
-            "year": "2023",
-            "quality": "HD",
-            "active": True,
-            "downloads": 0,
-            "added_date": datetime.now()
-        },
-        {
-            "title": "Doraemon Jadoo Mantar Aur Jahnoom",
-            "poster": "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg",
-            "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom",
-            "keywords": ["jadoo", "magic", "mantar", "jahnoom", "hell", "underworld"],
-            "year": "2022",
-            "quality": "HD",
-            "active": True,
-            "downloads": 0,
-            "added_date": datetime.now()
-        },
-        {
-            "title": "Doraemon Dinosaur Yoddha",
-            "poster": "https://i.postimg.cc/3w83qTtr/Doraemon-The-Movie-Dinosaur-Yoddhha-Hindi-Tamil-Telugu-Download-FHD-990x557.jpg",
-            "link": "https://dorebox.vercel.app/download.html?title=Dinosaur%20Yodha",
-            "keywords": ["dinosaur", "dino", "yodha", "warrior", "knight"],
-            "year": "2021",
-            "quality": "FHD",
-            "active": True,
-            "downloads": 0,
-            "added_date": datetime.now()
-        },
-        {
-            "title": "Stand by Me Doraemon",
-            "poster": "https://i.postimg.cc/vmkLDN1X/Doraemon-The-Movie-Stand-by-Me-by-cjh.png",
-            "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%201",
-            "keywords": ["stand by me", "3d", "emotional", "friendship"],
-            "year": "2020",
-            "quality": "3D",
-            "active": True,
-            "downloads": 0,
-            "added_date": datetime.now()
-        },
-        {
-            "title": "Stand by Me Doraemon 2",
-            "poster": "https://i.postimg.cc/y8wkR4PJ/Doraemon-The-Movie-Stand-by-Me-2-by-cjh.png",
-            "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%202",
-            "keywords": ["stand by me 2", "part 2", "sequel", "3d"],
-            "year": "2021",
-            "quality": "3D",
-            "active": True,
-            "downloads": 0,
-            "added_date": datetime.now()
-        }
-    ]
-    
-    movies_collection.insert_many(movies_data)
-    logger.info(f"✅ Initialized {len(movies_data)} movies in database")
-
-# Analytics functions
-def log_user_activity(user_id, activity, details=None):
-    """Log user activity to analytics collection."""
-    try:
-        analytics_collection.insert_one({
-            "user_id": user_id,
-            "activity": activity,
-            "details": details,
-            "timestamp": datetime.now()
-        })
-    except Exception as e:
-        logger.error(f"Failed to log activity: {e}")
-
-def add_or_update_user(user):
-    """Add new user or update existing user info."""
-    try:
-        user_data = {
-            "user_id": user.id,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "username": user.username,
-            "language_code": user.language_code,
-            "last_active": datetime.now()
-        }
-        
-        users_collection.update_one(
-            {"user_id": user.id},
-            {"$set": user_data, "$setOnInsert": {"joined_date": datetime.now()}},
-            upsert=True
-        )
-        return True
-    except Exception as e:
-        logger.error(f"Failed to add/update user: {e}")
-        return False
-
-# Flask app for webhook
+# Create Flask app
 app = Flask(__name__)
 
-# Bot application
-bot_application = None
-
-def init_bot():
-    """Initialize bot application."""
-    global bot_application
+def send_message(chat_id, text, reply_markup=None):
+    """Send message via Telegram API."""
+    if not TOKEN:
+        return False
+    
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    data = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }
+    
+    if reply_markup:
+        data["reply_markup"] = json.dumps(reply_markup)
+    
     try:
-        bot_application = Application.builder().token(TOKEN).build()
-        
-        # Add handlers
-        bot_application.add_handler(CommandHandler("start", start_command))
-        bot_application.add_handler(CommandHandler("help", help_command))
-        bot_application.add_handler(CommandHandler("stats", stats_command))
-        bot_application.add_handler(CommandHandler("broadcast", broadcast_command))
-        bot_application.add_handler(CommandHandler("addmovie", add_movie_command))
-        bot_application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        
-        logger.info("✅ Bot application initialized!")
-        return True
+        response = requests.post(url, json=data, timeout=10)
+        return response.status_code == 200
     except Exception as e:
-        logger.error(f"❌ Bot initialization failed: {e}")
+        logger.error(f"Send message error: {e}")
         return False
 
-# [Continue with bot handlers...]
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def send_photo(chat_id, photo, caption, reply_markup=None):
+    """Send photo via Telegram API."""
+    if not TOKEN:
+        return False
+        
+    url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+    data = {
+        "chat_id": chat_id,
+        "photo": photo,
+        "caption": caption,
+        "parse_mode": "Markdown"
+    }
+    
+    if reply_markup:
+        data["reply_markup"] = json.dumps(reply_markup)
+    
+    try:
+        response = requests.post(url, json=data, timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        logger.error(f"Send photo error: {e}")
+        return False
+
+def handle_start(chat_id, user_name):
     """Handle /start command."""
-    user = update.effective_user
+    keyboard = {
+        "keyboard": [[movie["title"]] for movie in MOVIES],
+        "resize_keyboard": True
+    }
     
-    # Add/update user in database
-    add_or_update_user(user)
-    log_user_activity(user.id, "start_command")
-    
-    # Check if new user
-    user_doc = users_collection.find_one({"user_id": user.id})
-    is_new_user = (datetime.now() - user_doc.get("joined_date", datetime.now())).seconds < 60
-    
-    # Send admin notification for new users
-    if ADMIN_ID and str(user.id) != ADMIN_ID and is_new_user:
-        try:
-            total_users = users_collection.count_documents({})
-            await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=f"🆕 *New User Alert!* 🎉
+    welcome_text = f"""👋 *Welcome {user_name}!* 🎬
 
-"
-                     f"👤 Name: {user.full_name}
-"
-                     f"🔖 Username: @{user.username or 'N/A'}
-"
-                     f"🆔 ID: `{user.id}`
-"
-                     f"🌐 Language: {user.language_code or 'N/A'}
-"
-                     f"👥 Total Users: *{total_users}*",
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception as e:
-            logger.error(f"Failed to notify admin: {e}")
+🤖 *Doraemon Movies Bot*
+
+🎯 Get your favorite Doraemon movies here!
+
+✨ *Features:*
+🔸 Hindi Dubbed Movies
+🔸 HD Quality Downloads  
+🔸 Direct Links
+🔸 Fast & Free
+
+👇 *Choose a movie:*"""
     
-    # Get active movies from database
-    movies = list(movies_collection.find({"active": True}).sort("downloads", -1))
+    send_message(chat_id, welcome_text, keyboard)
+
+def handle_movie_request(chat_id, movie_title):
+    """Handle movie selection."""
+    movie = None
+    for m in MOVIES:
+        if movie_title.lower() in m["title"].lower() or m["title"].lower() in movie_title.lower():
+            movie = m
+            break
     
-    # Create keyboard with movie titles
-    keyboard = []
-    for movie in movies:
-        keyboard.append([movie["title"]])
-    
-    # Add utility buttons
-    keyboard.append(["🔍 Search Movies", "📊 My Stats", "ℹ️ Help"])
-    
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    
-    welcome_message = (
-        f"👋 *Welcome {user.first_name}!* 🎬
+    if movie:
+        keyboard = {
+            "inline_keyboard": [[{
+                "text": "📥 Download Now",
+                "url": movie["link"]
+            }]]
+        }
+        
+        caption = f"🎬 **{movie['title']}**
 
-"
-        "🤖 *Doraemon Movies Bot*
+📥 Click below to download!"
+        
+        # Try to send photo, fallback to text if fails
+        success = send_photo(chat_id, movie["poster"], caption, keyboard)
+        if not success:
+            send_message(chat_id, f"{caption}
 
-"
-        "🎯 यहाँ आपको मिलेंगी सबसे बेहतरीन Doraemon movies!
+🔗 Download: {movie['link']}")
+    else:
+        # Movie not found - show available movies
+        movies_list = "
+".join([f"• {m['title']}" for m in MOVIES])
+        text = f"😔 Movie not found!
 
-"
-        "✨ *Features:*
-"
-        "🔸 Hindi Dubbed Movies
-"
-        "🔸 High Quality Downloads
-"
-        "🔸 Direct Download Links
-"
-        "🔸 Fast & Free
-"
-        "🔸 User Statistics
-"
-        "🔸 Search by Keywords
+📝 Available movies:
+{movies_list}"
+        send_message(chat_id, text)
 
-"
-        "📱 *How to use:*
-"
-        "• Select movie from keyboard
-"
-        "• Or type movie name to search
-"
-        "• Click download button
-
-"
-        f"🎬 *Available Movies: {len(movies)}*
-"
-        f"👥 *Total Users: {users_collection.count_documents({})}*
-
-"
-        "👇 *Choose a movie from the menu below:*"
-    )
-    
-    await update.message.reply_text(
-        welcome_message,
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.MARKDOWN,
-        disable_web_page_preview=True
-    )
-
-# [Include all other bot handlers here - stats_command, broadcast_command, etc.]
+def process_update(update_data):
+    """Process incoming Telegram update."""
+    try:
+        message = update_data.get("message")
+        if not message:
+            return
+        
+        chat_id = message["chat"]["id"]
+        user_name = message["from"].get("first_name", "User")
+        text = message.get("text", "")
+        
+        logger.info(f"Message from {user_name}: {text}")
+        
+        if text.startswith("/start"):
+            handle_start(chat_id, user_name)
+        elif text and text != "/start":
+            handle_movie_request(chat_id, text)
+            
+    except Exception as e:
+        logger.error(f"Process update error: {e}")
 
 # Flask routes
 @app.route('/')
 def home():
-    """Admin dashboard homepage."""
+    return """
+    <html>
+    <head><title>Doraemon Movies Bot</title></head>
+    <body style="font-family:Arial; background:#111; color:white; text-align:center; padding:50px;">
+        <h1>🤖 Doraemon Movies Bot</h1>
+        <p>✅ Bot is running successfully!</p>
+        <p>📱 Start the bot on Telegram to download movies.</p>
+        <hr>
+        <h3>📊 Bot Status</h3>
+        <p><strong>Status:</strong> Online ✅</p>
+        <p><strong>Movies Available:</strong> 3</p>
+        <p><strong>Features:</strong> Hindi Dubbed, HD Quality</p>
+    </body>
+    </html>
+    """
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    """Handle webhook from Telegram."""
     try:
-        total_users = users_collection.count_documents({})
-        total_movies = movies_collection.count_documents({"active": True})
-        total_downloads = sum([movie.get("downloads", 0) for movie in movies_collection.find({"active": True})])
+        update_data = request.get_json()
+        if update_data:
+            # Process in separate thread to avoid blocking
+            thread = Thread(target=process_update, args=(update_data,), daemon=True)
+            thread.start()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/set_webhook')
+def set_webhook():
+    """Set webhook URL."""
+    if not TOKEN:
+        return jsonify({"error": "TOKEN not configured"}), 400
+    
+    if not WEBHOOK_URL:
+        return jsonify({"error": "WEBHOOK_URL not configured"}), 400
+    
+    webhook_url = f"{WEBHOOK_URL}/webhook"
+    
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{TOKEN}/setWebhook",
+            json={"url": webhook_url},
+            timeout=10
+        )
         
-        dashboard_html = f"""
-        <html>
-        <head>
-            <title>Doraemon Bot Dashboard</title>
-            <style>
-                body {{ font-family: Arial; background: #111; color: white; margin: 0; padding: 20px; }}
-                .container {{ max-width: 1200px; margin: 0 auto; }}
-                .header {{ text-align: center; margin-bottom: 40px; }}
-                .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }}
-                .stat-card {{ background: #222; padding: 20px; border-radius: 10px; text-align: center; }}
-                .stat-number {{ font-size: 2em; color: #00bfff; font-weight: bold; }}
-                .stat-label {{ color: #999; margin-top: 5px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>🤖 Doraemon Movies Bot Dashboard</h1>
-                    <p>Admin Panel - Real-time Statistics</p>
-                </div>
-                
-                <div class="stats">
-                    <div class="stat-card">
-                        <div class="stat-number">{total_users}</div>
-                        <div class="stat-label">Total Users</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number">{total_movies}</div>
-                        <div class="stat-label">Active Movies</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number">{total_downloads}</div>
-                        <div class="stat-label">Total Downloads</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number">✅</div>
-                        <div class="stat-label">Bot Status</div>
-                    </div>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("ok"):
+                return jsonify({
+                    "success": True,
+                    "message": f"Webhook set to: {webhook_url}"
+                })
         
-        return dashboard_html
+        return jsonify({"error": "Failed to set webhook"}), 400
         
     except Exception as e:
-        return f"<h1>Dashboard Error: {e}</h1>"
+        return jsonify({"error": str(e)}), 500
 
-# [Continue with webhook and other routes...]
+@app.route('/health')
+def health():
+    """Health check endpoint."""
+    return jsonify({
+        "status": "healthy",
+        "bot": "online",
+        "movies": len(MOVIES),
+        "webhook_configured": bool(WEBHOOK_URL and TOKEN)
+    })
 
 # Main function
-def main():
-    """Start the application."""
-    logger.info("🚀 Starting Doraemon Movies Telegram Bot with MongoDB...")
-    
-    # Setup database
-    if not setup_database():
-        logger.error("❌ Database setup failed. Exiting...")
-        return
-    
-    # Initialize bot
-    if not init_bot():
-        logger.error("❌ Bot initialization failed. Exiting...")
-        return
-    
-    # Start Flask server
-    port = int(os.environ.get('PORT', 8080))
-    logger.info(f"✅ Starting Flask server on port {port}")
-    
-    app.run(host='0.0.0.0', port=port, debug=False)
-
 if __name__ == '__main__':
-    main()
+    # Log startup
+    logger.info("🚀 Starting Doraemon Movies Bot...")
+    logger.info(f"TOKEN configured: {bool(TOKEN)}")
+    logger.info(f"WEBHOOK_URL configured: {bool(WEBHOOK_URL)}")
+    
+    # Start Flask
+    port = int(os.environ.get('PORT', 8080))
+    logger.info(f"✅ Starting on port {port}")
+    
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        logger.error(f"❌ Startup failed: {e}")
+        raise
