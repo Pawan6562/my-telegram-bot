@@ -1,60 +1,79 @@
 import os
-import logging
+import sys
 import time
-from flask import Flask, request, jsonify
+import logging
+from flask import Flask, jsonify
 import requests
 import threading
 
-# Simple logging setup
+# Setup logging for Railway
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
-# Configuration
-BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-WEBHOOK_URL = os.environ.get("RAILWAY_STATIC_URL", "")
+# Print startup info for Railway logs
+print("🚀 Doraemon Bot Starting...")
+print(f"Python version: {sys.version}")
+print(f"Current directory: {os.getcwd()}")
 
-# Simple movie data
-MOVIES = [
-    {
-        "title": "Doraemon Three Swordsmen",
-        "link": "https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen"
-    },
-    {
-        "title": "Doraemon Jadoo Mantar",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom"
-    },
-    {
-        "title": "Stand by Me Doraemon",
-        "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%201"
-    }
-]
+# Environment variables with defaults
+BOT_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+PORT = int(os.environ.get("PORT", 8080))
 
-# Create Flask app
+print(f"PORT: {PORT}")
+print(f"Bot token configured: {bool(BOT_TOKEN)}")
+
+# Create Flask app with Railway-specific settings
 app = Flask(__name__)
+app.config['DEBUG'] = False
 
-# Global variables for bot state
-bot_running = False
+# Global state
+bot_active = False
 message_count = 0
+
+def make_request(url, method="GET", data=None, timeout=10):
+    """Safe HTTP request wrapper."""
+    try:
+        if method == "POST":
+            response = requests.post(url, json=data, timeout=timeout)
+        else:
+            response = requests.get(url, timeout=timeout)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.warning(f"HTTP {response.status_code}: {url}")
+    except requests.exceptions.Timeout:
+        logger.warning(f"Timeout: {url}")
+    except Exception as e:
+        logger.error(f"Request error: {e}")
+    
+    return None
 
 def send_telegram_message(chat_id, text):
     """Send message via Telegram API."""
     if not BOT_TOKEN:
+        logger.warning("No bot token - cannot send message")
         return False
     
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        data = {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML"
-        }
-        response = requests.post(url, json=data, timeout=10)
-        return response.status_code == 200
-    except Exception as e:
-        logger.error(f"Failed to send message: {e}")
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    
+    result = make_request(url, "POST", data)
+    if result and result.get("ok"):
+        logger.info(f"Message sent to {chat_id}")
+        return True
+    else:
+        logger.warning(f"Failed to send message to {chat_id}")
         return False
 
 def get_telegram_updates(offset=None):
@@ -62,226 +81,244 @@ def get_telegram_updates(offset=None):
     if not BOT_TOKEN:
         return None
     
-    try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
-        params = {"timeout": 10}
-        if offset:
-            params["offset"] = offset
-        
-        response = requests.get(url, params=params, timeout=15)
-        if response.status_code == 200:
-            return response.json()
-    except Exception as e:
-        logger.error(f"Failed to get updates: {e}")
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
+    params = {"timeout": 30}
+    if offset:
+        params["offset"] = offset
     
-    return None
+    # Build URL with parameters
+    if params:
+        url += "?" + "&".join([f"{k}={v}" for k, v in params.items()])
+    
+    return make_request(url)
 
-def handle_message(chat_id, text, user_name):
-    """Handle incoming message."""
+def process_message(chat_id, text, user_name):
+    """Process user message."""
     global message_count
     message_count += 1
     
+    logger.info(f"Processing message from {user_name}: {text}")
+    
     try:
-        # Handle /start command
         if text == "/start":
-            welcome = f"""🎬 <b>Welcome {user_name}!</b>
-            
+            welcome_text = f"""🎬 <b>Welcome {user_name}!</b>
+
 🤖 <b>Doraemon Movies Bot</b>
 
-📽️ <b>Available Movies:</b>
-1. Doraemon Three Swordsmen
-2. Doraemon Jadoo Mantar  
-3. Stand by Me Doraemon
+📺 <b>Available Movies:</b>
+• Three Swordsmen
+• Jadoo Mantar  
+• Stand by Me
 
-📱 <b>How to use:</b>
-Type movie name to get download link!
+💬 <b>How to use:</b>
+Type movie name to get download link
 
-Examples:
-• Type "three" for Three Swordsmen
+<b>Examples:</b>
 • Type "jadoo" for Jadoo Mantar
+• Type "three" for Three Swordsmen
 • Type "stand" for Stand by Me"""
+
+            send_telegram_message(chat_id, welcome_text)
             
-            send_telegram_message(chat_id, welcome)
-            return
-        
-        # Search for movies
-        text_lower = text.lower()
-        found_movie = None
-        
-        if "three" in text_lower or "swordsmen" in text_lower:
-            found_movie = MOVIES[0]
-        elif "jadoo" in text_lower or "mantar" in text_lower:
-            found_movie = MOVIES[1] 
-        elif "stand" in text_lower or "me" in text_lower:
-            found_movie = MOVIES[2]
-        
-        if found_movie:
-            movie_msg = f"""🎬 <b>{found_movie['title']}</b>
+        elif "jadoo" in text.lower() or "mantar" in text.lower():
+            movie_text = """🎬 <b>Doraemon Jadoo Mantar Aur Jahnoom</b>
 
 📥 <b>Download Link:</b>
-{found_movie['link']}
+https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom
 
-⚡ Click the link above to download!
+⚡ Click link above to download
 🎭 Hindi Dubbed | HD Quality"""
+
+            send_telegram_message(chat_id, movie_text)
             
-            send_telegram_message(chat_id, movie_msg)
+        elif "three" in text.lower() or "swordsmen" in text.lower():
+            movie_text = """🎬 <b>Doraemon Three Swordsmen</b>
+
+📥 <b>Download Link:</b>
+https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen
+
+⚡ Click link above to download  
+🎭 Hindi Dubbed | HD Quality"""
+
+            send_telegram_message(chat_id, movie_text)
+            
+        elif "stand" in text.lower():
+            movie_text = """🎬 <b>Stand by Me Doraemon</b>
+
+📥 <b>Download Link:</b>
+https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%201
+
+⚡ Click link above to download
+🎭 Hindi Dubbed | 3D Quality"""
+
+            send_telegram_message(chat_id, movie_text)
+            
         else:
-            help_msg = """🔍 <b>Movie not found!</b>
+            help_text = """🔍 <b>Available Movies:</b>
 
-📝 <b>Available movies:</b>
-• Type "three" for Three Swordsmen
-• Type "jadoo" for Jadoo Mantar
-• Type "stand" for Stand by Me
+• Type <code>jadoo</code> for Jadoo Mantar
+• Type <code>three</code> for Three Swordsmen  
+• Type <code>stand</code> for Stand by Me
 
-Or send /start to see the menu again!"""
-            
-            send_telegram_message(chat_id, help_msg)
+Or send /start to see menu again!"""
+
+            send_telegram_message(chat_id, help_text)
             
     except Exception as e:
-        logger.error(f"Error handling message: {e}")
-        send_telegram_message(chat_id, "Sorry, something went wrong. Please try again!")
+        logger.error(f"Error processing message: {e}")
+        send_telegram_message(chat_id, "❌ Error occurred. Try /start")
 
-def polling_loop():
-    """Main polling loop in background."""
-    global bot_running
+def telegram_polling():
+    """Main polling function."""
+    global bot_active
     
     if not BOT_TOKEN:
-        logger.error("No bot token configured!")
+        logger.error("❌ TELEGRAM_TOKEN not configured!")
         return
     
-    logger.info("Starting polling loop...")
-    bot_running = True
-    offset = None
+    # Test bot token first
+    test_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getMe"
+    bot_info = make_request(test_url)
     
-    while bot_running:
+    if not bot_info or not bot_info.get("ok"):
+        logger.error("❌ Invalid bot token!")
+        return
+    
+    bot_data = bot_info["result"]
+    logger.info(f"✅ Bot verified: @{bot_data['username']} ({bot_data['first_name']})")
+    
+    bot_active = True
+    offset = 0
+    
+    logger.info("🔄 Starting polling loop...")
+    
+    while bot_active:
         try:
-            # Get updates
-            result = get_telegram_updates(offset)
+            updates = get_telegram_updates(offset)
             
-            if result and result.get("ok"):
-                updates = result.get("result", [])
-                
-                for update in updates:
-                    offset = update["update_id"] + 1
-                    
-                    if "message" in update:
-                        message = update["message"]
-                        chat_id = message["chat"]["id"]
-                        text = message.get("text", "")
-                        user_name = message["from"].get("first_name", "User")
+            if updates and updates.get("ok"):
+                for update in updates.get("result", []):
+                    try:
+                        offset = update["update_id"] + 1
                         
-                        logger.info(f"Message from {user_name}: {text}")
+                        if "message" in update:
+                            msg = update["message"]
+                            chat_id = msg["chat"]["id"]
+                            text = msg.get("text", "")
+                            user_name = msg["from"].get("first_name", "User")
+                            
+                            # Process in separate thread
+                            threading.Thread(
+                                target=process_message, 
+                                args=(chat_id, text, user_name),
+                                daemon=True
+                            ).start()
+                            
+                    except Exception as e:
+                        logger.error(f"Update processing error: {e}")
                         
-                        # Handle message in separate thread
-                        threading.Thread(
-                            target=handle_message,
-                            args=(chat_id, text, user_name),
-                            daemon=True
-                        ).start()
             else:
-                logger.warning(f"Failed to get updates: {result}")
-                time.sleep(5)
+                logger.warning("No updates received, continuing...")
+                time.sleep(1)
                 
         except Exception as e:
             logger.error(f"Polling error: {e}")
             time.sleep(5)
     
-    logger.info("Polling loop stopped")
+    logger.info("📴 Polling stopped")
 
 # Flask routes
 @app.route("/")
 def home():
-    """Simple homepage."""
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Doraemon Bot - Railway</title>
-        <style>
-            body {{ 
-                font-family: Arial, sans-serif; 
-                background: #111; 
-                color: white; 
-                text-align: center; 
-                padding: 50px;
-            }}
-            .status {{ background: #222; padding: 20px; border-radius: 10px; margin: 20px 0; }}
-            .online {{ color: #00ff00; }}
-            .offline {{ color: #ff0000; }}
-        </style>
-        <meta http-equiv="refresh" content="10">
-    </head>
-    <body>
-        <h1>🤖 Doraemon Movies Bot</h1>
-        <div class="status">
-            <h2>📊 Bot Status</h2>
-            <p><strong>Status:</strong> <span class="{'online' if bot_running else 'offline'}">{'✅ Running' if bot_running else '❌ Stopped'}</span></p>
-            <p><strong>Messages Processed:</strong> {message_count}</p>
-            <p><strong>Bot Token:</strong> {'✅ Configured' if BOT_TOKEN else '❌ Missing'}</p>
-            <p><strong>Movies Available:</strong> {len(MOVIES)}</p>
-        </div>
-        
-        <div class="status">
-            <h3>🎬 Available Movies</h3>
-            <p>• Doraemon Three Swordsmen</p>
-            <p>• Doraemon Jadoo Mantar</p>
-            <p>• Stand by Me Doraemon</p>
-        </div>
-        
-        <div class="status">
-            <h3>🚀 How to Use</h3>
-            <p>1. Find your bot on Telegram</p>
-            <p>2. Send /start command</p>
-            <p>3. Type movie name to get download link</p>
-        </div>
-    </body>
-    </html>
-    """
+    """Home page with bot status."""
+    try:
+        return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Doraemon Movies Bot</title>
+    <meta http-equiv="refresh" content="30">
+    <style>
+        body {{ font-family: Arial; background: #111; color: white; padding: 20px; text-align: center; }}
+        .card {{ background: #222; padding: 20px; margin: 20px 0; border-radius: 10px; }}
+        .green {{ color: #00ff00; }}
+        .red {{ color: #ff0000; }}
+        .blue {{ color: #00bfff; }}
+    </style>
+</head>
+<body>
+    <h1 class="blue">🤖 Doraemon Movies Bot</h1>
+    
+    <div class="card">
+        <h2>📊 Status Dashboard</h2>
+        <p><strong>Bot Status:</strong> <span class="{'green' if bot_active else 'red'}">{'🟢 Active' if bot_active else '🔴 Inactive'}</span></p>
+        <p><strong>Token:</strong> <span class="{'green' if BOT_TOKEN else 'red'}">{'🟢 Configured' if BOT_TOKEN else '🔴 Missing'}</span></p>
+        <p><strong>Messages:</strong> {message_count}</p>
+        <p><strong>Port:</strong> {PORT}</p>
+    </div>
+    
+    <div class="card">
+        <h3>🎬 Available Movies</h3>
+        <p>• Doraemon Three Swordsmen</p>
+        <p>• Doraemon Jadoo Mantar</p>
+        <p>• Stand by Me Doraemon</p>
+    </div>
+</body>
+</html>
+        """
+    except Exception as e:
+        return f"<h1>Error: {str(e)}</h1>"
 
 @app.route("/health")
 def health():
     """Health check for Railway."""
     return jsonify({
         "status": "healthy",
-        "bot_running": bot_running,
+        "bot_active": bot_active,
         "token_configured": bool(BOT_TOKEN),
         "messages_processed": message_count,
-        "movies_count": len(MOVIES)
+        "port": PORT
     })
 
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    """Webhook endpoint (not used but kept for compatibility)."""
-    return jsonify({"status": "webhook not used, using polling"})
+@app.route("/ping")
+def ping():
+    """Simple ping test."""
+    return "pong"
 
-# Start polling when app starts
-def start_bot():
-    """Start the bot in background."""
-    if BOT_TOKEN:
-        logger.info("Starting bot with polling...")
-        threading.Thread(target=polling_loop, daemon=True).start()
-    else:
-        logger.error("TELEGRAM_TOKEN not configured!")
-
-# Run the app
+# Main entry point
 if __name__ == "__main__":
-    logger.info("🚀 Starting Doraemon Bot on Railway...")
-    
-    # Start bot in background
-    start_bot()
-    
-    # Start Flask server
-    port = int(os.environ.get("PORT", 8080))
-    logger.info(f"Starting Flask server on port {port}")
+    print("=" * 50)
+    print("🎬 DORAEMON MOVIES BOT - RAILWAY")
+    print("=" * 50)
     
     try:
+        logger.info("🚀 Starting Doraemon Movies Bot...")
+        logger.info(f"📊 Port: {PORT}")
+        logger.info(f"🔑 Token configured: {bool(BOT_TOKEN)}")
+        
+        # Start bot in background thread
+        if BOT_TOKEN:
+            logger.info("🤖 Starting Telegram bot...")
+            bot_thread = threading.Thread(target=telegram_polling, daemon=True)
+            bot_thread.start()
+            logger.info("✅ Bot thread started")
+        else:
+            logger.warning("⚠️ Bot token not configured - bot disabled")
+        
+        # Start Flask server
+        logger.info(f"🌐 Starting Flask server on 0.0.0.0:{PORT}")
+        
         app.run(
             host="0.0.0.0",
-            port=port,
+            port=PORT,
             debug=False,
             use_reloader=False,
             threaded=True
         )
+        
     except Exception as e:
-        logger.error(f"Failed to start server: {e}")
-        raise
+        logger.error(f"❌ Startup failed: {e}")
+        # Keep process alive even if Flask fails
+        logger.info("Keeping process alive...")
+        while True:
+            time.sleep(60)
