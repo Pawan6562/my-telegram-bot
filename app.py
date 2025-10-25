@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # =====================================================================================
-# DORAEMON AI MOVIE BOT - VERSION 2.2 (FINAL & COMPLETE)
+# DORAEMON AI MOVIE BOT - VERSION 2.3 (CORRECTED & FINAL)
 # FEATURES:
 # - AI-Powered Search using OpenRouter (Gemma Model)
 # - AI-Powered General Chat
@@ -161,6 +161,7 @@ async def ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🤔 Maaf kijiye, main samajh nahi paaya ki aap kaunsi movie dhoondh rahe hain.")
         else:
             await update.message.reply_text(ai_response_text)
+            
     except Exception as e:
         print(f"AI handler mein error: {e}")
         await update.message.reply_text("Kuch takneeki samasya aa gayi hai.")
@@ -176,7 +177,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Bot ko start aur run karne wala main function."""
     if not all([TOKEN, ADMIN_ID, MONGO_URI, OPENROUTER_API_KEY]):
-        print("❌ Error: Zaroori Environment Variables set nahi hain!")
+        print("❌ Error: Zaroori Environment Variables set nahi hain! Please check them.")
         return
 
     if not setup_dependencies():
