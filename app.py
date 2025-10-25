@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 
 # =====================================================================================
-# DORAEMON AI MOVIE BOT - VERSION 2.0
+# DORAEMON AI MOVIE BOT - VERSION 2.2 (FINAL & COMPLETE)
 # FEATURES:
-# - AI-Powered Movie Search (using Google Gemini)
+# - AI-Powered Search using OpenRouter (Gemma Model)
 # - AI-Powered General Chat
 # - MongoDB for User Statistics
-# - Admin Panel (Stats, Broadcast, Import)
-# - Keeps alive on hosting platforms like Render
+# - Admin Panel (Stats)
+# - Keeps alive on hosting platforms like Choreo
 # =====================================================================================
 
 import os
 import asyncio
-import google.generativeai as genai
+from openai import OpenAI
 from threading import Thread
 from flask import Flask
 from pymongo import MongoClient, errors
@@ -21,35 +21,34 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from telegram.constants import ParseMode
 from telegram.error import Forbidden
 
-# --- Step 1: Bot Configuration (Aapki details yahaan daalein) ---
-# Apne Environment Variables mein yeh details set karein.
-# Agar aap local machine par test kar rahe hain, toh "YOUR_..." ki jagah direct value daal sakte hain.
-TOKEN = os.environ.get("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN")
-ADMIN_ID = os.environ.get("ADMIN_ID", "YOUR_ADMIN_ID") # Yeh aapki Telegram User ID (number) hai
-MONGO_URI = os.environ.get("MONGO_URI", "YOUR_MONGODB_CONNECTION_STRING")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
+# --- Configuration: Apni details Environment Variables mein set karein ---
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+ADMIN_ID = os.environ.get("ADMIN_ID")
+MONGO_URI = os.environ.get("MONGO_URI")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-# --- Step 2: AI Model & Database Setup ---
-# Global variables
-client, db, users_collection, model = None, None, None, None
+# Optional: Aapki site ka naam OpenRouter par ranking ke liye
+YOUR_SITE_URL = "https://t.me/doraemon_all_movies_bycjh" # Aapke bot ya channel ka link
+YOUR_SITE_NAME = "Doraemon AI Bot" # Aapke project ka naam
+
+# --- Global Variables ---
+db_client, db, users_collection, ai_client = None, None, None, None
 
 def setup_dependencies():
-    """AI Model aur MongoDB, dono ko setup karne ka function."""
-    global client, db, users_collection, model
+    """AI Client aur MongoDB, dono ko setup karne ka function."""
+    global db_client, db, users_collection, ai_client
     
-    # AI Model Setup
+    # AI Client Setup (OpenRouter ke liye)
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash') # 'gemini-1.5-flash' tez aur sasta hai
-        print("✅ Gemini AI Model successfully load ho gaya!")
+        ai_client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
+        print("✅ OpenRouter AI Client successfully load ho gaya!")
     except Exception as e:
-        print(f"❌ Gemini AI Model load nahi ho paaya. Error: {e}")
-        # Agar AI load na ho toh bot band nahi hoga, bas AI features kaam nahi karenge.
+        print(f"❌ OpenRouter AI Client load nahi ho paaya. Error: {e}")
     
     # Database Setup
     try:
-        client = MongoClient(MONGO_URI)
-        db = client.get_database('dorebox_bot') # Aap database ka naam badal sakte hain
+        db_client = MongoClient(MONGO_URI)
+        db = db_client.get_database('dorebox_bot')
         users_collection = db.users
         users_collection.create_index("user_id", unique=True)
         print("✅ MongoDB se successfully connect ho gaya!")
@@ -58,8 +57,7 @@ def setup_dependencies():
         print(f"❌ MongoDB se connect nahi ho paaya. Error: {e}")
         return False
 
-# --- Step 3: Movie Data ---
-# Aapki sabhi movies ki list
+# --- Movie Data (Poori List) ---
 MOVIES_DATA = [
     {"title": "Doraemon Nobita ke Teen Dristi Sheershiyon Wale Talwarbaaz", "poster": "https://i.postimg.cc/RZ82qxJ3/Doraemon-The-Movie-Nobita-s-Three-Magical-Swordsmen.png", "link": "https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen"},
     {"title": "Doraemon Jadoo Mantar Aur Jahnoom", "poster": "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom"},
@@ -88,45 +86,35 @@ MOVIES_DATA = [
 ]
 MOVIE_TITLES = [movie["title"] for movie in MOVIES_DATA]
 
-# --- Step 4: Flask App (Render ko 'alive' rakhne ke liye) ---
+# --- Flask App (Bot ko zinda rakhne ke liye) ---
 flask_app = Flask(__name__)
 @flask_app.route('/')
 def home():
     return "Bot is alive and running!"
 
-# --- Step 5: Bot Handlers ---
+# --- Bot Handlers ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/start command handle karta hai."""
+    """/start command ko handle karta hai."""
     user = update.effective_user
     try:
         if users_collection and not users_collection.find_one({"user_id": user.id}):
             users_collection.insert_one({"user_id": user.id, "name": user.full_name, "username": user.username})
             if ADMIN_ID:
-                admin_message = (f"🔔 New User Alert! 🔔\n\n"
-                                 f"Name: {user.full_name}\n"
-                                 f"Username: @{user.username if user.username else 'N/A'}\n"
-                                 f"Telegram ID: `{user.id}`")
-                await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, parse_mode=ParseMode.MARKDOWN)
+                await context.bot.send_message(chat_id=ADMIN_ID, text=f"🔔 New User: {user.full_name} (@{user.username})")
     except Exception as e:
-        print(f"Start command mein user check karte waqt error: {e}")
+        print(f"Start command mein error: {e}")
 
     keyboard = [[title] for title in MOVIE_TITLES]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True, placeholder="Movie select karein ya naam likhein...")
-    
-    welcome_text = ("👋 *𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗔𝗜 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁!* 🎬💙\n\n"
-                    "🚀 𝗬𝗮𝗵𝗮𝗮𝗻 𝗮𝗮𝗽𝗸𝗼 𝗺𝗶𝗹𝘁𝗶 𝗵𝗮𝗶𝗻 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗸𝗶 𝘀𝗮𝗯𝘀𝗲 𝘇𝗮𝗯𝗮𝗿𝗱𝗮𝘀𝘁 𝗺𝗼𝘃𝗶𝗲𝘀, 𝗯𝗶𝗹𝗸𝘂𝗹 𝗲𝗮𝘀𝘆 𝗮𝘂𝗿 𝗳𝗮𝘀𝘁 𝗱𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗸𝗲 𝘀𝗮𝗮𝘁𝗵।\n\n"
-                    "✨ *Ab yeh bot AI se chalta hai!* Aap movie ka naam jaise marzi likh sakte hain ya mujhse normal baat bhi kar sakte hain.\n\n"
-                    "👉 *Bas movie ka naam likhiye ya neeche diye gaye menu se select kijiye!* 🍿💙\n\n"
-                    "📢 Hamare [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_all_movies_bycjh) channel ko join karna na bhoolen!")
-
+    welcome_text = ("👋 *Welcome to Doraemon AI Bot (OpenRouter Edition)!* 🎬\n\n"
+                    "Aap movie ka naam likh sakte hain ya mujhse normal baat bhi kar sakte hain.")
     await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
 async def ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """User ke sabhi text messages ko AI se handle karta hai."""
+    """User ke sabhi text messages ko OpenRouter AI se handle karta hai."""
     user_message = update.message.text
-
-    # Pehle check karo ki user ne keyboard se exact title select kiya hai ya nahi
+    
     exact_match = next((movie for movie in MOVIES_DATA if movie['title'] == user_message), None)
     if exact_match:
         caption = f"🎬 **{exact_match['title']}**\n\n📥 Download from the button below!"
@@ -135,28 +123,32 @@ async def ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_photo(photo=exact_match['poster'], caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
         return
 
-    # Agar exact match nahi hai, tab AI ka istemal karo
-    if not model:
-        await update.message.reply_text("Maaf kijiye, AI service abhi kaam nahi kar rahi hai. Aap keyboard se movie select kar sakte hain.")
+    if not ai_client:
+        await update.message.reply_text("Maaf kijiye, AI service abhi kaam nahi kar rahi hai.")
         return
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
     
     movie_titles_str = ", ".join(f"'{title}'" for title in MOVIE_TITLES)
     system_prompt = f"""
-    Aap ek Doraemon movie expert bot ho. Aapka kaam user ke message ko samajhna aur unhe sahi movie dhoondhne mein madad karna hai.
+    Aap ek Doraemon movie expert bot ho. Aapka kaam user ke message ko samajhna hai.
     Aapke paas yeh movies available hain: {movie_titles_str}.
     Rules:
-    1.  Agar user koi movie maang raha hai (jaise "dino wali movie" ya "stand by me 2"), toh uske message ko samajhkar upar di gayi list mein se **sirf aur sirf movie ka EXACT title** output mein do. Aur kuch nahi.
-    2.  Agar aapko 100% yakeen nahi hai ki user kaunsi movie maang raha hai, toh jawab do "NO_MOVIE_FOUND".
-    3.  Agar user movie nahi maang raha, balki normal baat-cheet kar raha hai (jaise 'hello', 'thank you'), toh usse ek friendly, short, aur helpful response do.
-    4.  Apne jawab hamesha Hinglish (Hindi in English script) mein do.
+    1. Agar user movie maang raha hai, toh upar di gayi list mein se sirf movie ka EXACT title output mein do. Aur kuch nahi.
+    2. Agar movie nahi mili, toh jawab do "NO_MOVIE_FOUND".
+    3. Agar user normal baat kar raha hai, toh usse ek friendly, short, aur helpful Hinglish mein jawab do.
     """
     
     try:
-        full_prompt = f"{system_prompt}\n\nUser ka message hai: '{user_message}'"
-        response = await model.generate_content_async(full_prompt)
-        ai_response_text = response.text.strip().replace("'", "")
+        completion = ai_client.chat.completions.create(
+            extra_headers={"HTTP-Referer": YOUR_SITE_URL, "X-Title": YOUR_SITE_NAME},
+            model="google/gemma-3-27b-it:free",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
+        )
+        ai_response_text = completion.choices[0].message.content.strip().replace("'", "")
 
         found_movie = next((movie for movie in MOVIES_DATA if movie['title'] == ai_response_text), None)
 
@@ -166,61 +158,29 @@ async def ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_photo(photo=found_movie['poster'], caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
         elif "NO_MOVIE_FOUND" in ai_response_text:
-            await update.message.reply_text("🤔 Maaf kijiye, main samajh nahi paaya ki aap kaunsi movie dhoondh rahe hain. Kya aap keyboard se select kar sakte hain ya thoda alag tarike se likh sakte hain?")
+            await update.message.reply_text("🤔 Maaf kijiye, main samajh nahi paaya ki aap kaunsi movie dhoondh rahe hain.")
         else:
             await update.message.reply_text(ai_response_text)
     except Exception as e:
         print(f"AI handler mein error: {e}")
-        await update.message.reply_text("Kuch takneeki samasya aa gayi hai. Kripya thodi der baad koshish karein.")
+        await update.message.reply_text("Kuch takneeki samasya aa gayi hai.")
 
-# --- Admin Commands ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin ke liye stats command."""
     if str(update.effective_user.id) != ADMIN_ID: return
-    if not users_collection:
-        await update.message.reply_text("Database se connection nahi hai.")
-        return
-    try:
-        total_users = users_collection.count_documents({})
-        await update.message.reply_text(f"📊 *Bot Statistics*\n\nTotal Unique Users: *{total_users}*", parse_mode=ParseMode.MARKDOWN)
-    except Exception as e:
-        await update.message.reply_text(f"Stats fetch karte waqt error: {e}")
+    if not users_collection: return await update.message.reply_text("DB not connected.")
+    total_users = users_collection.count_documents({})
+    await update.message.reply_text(f"📊 Total Users: *{total_users}*", parse_mode=ParseMode.MARKDOWN)
 
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if str(update.effective_user.id) != ADMIN_ID: return
-    if not users_collection:
-        await update.message.reply_text("Database se connection nahi hai.")
-        return
-
-    message_to_broadcast = " ".join(context.args)
-    if not message_to_broadcast:
-        await update.message.reply_text("Example: `/broadcast Hello everyone!`")
-        return
-
-    user_ids = [user["user_id"] for user in users_collection.find({}, {"user_id": 1})]
-    if not user_ids:
-        await update.message.reply_text("Database mein koi user nahi hai.")
-        return
-
-    await update.message.reply_text(f"📢 Broadcast shuru ho raha hai {len(user_ids)} users ke liye...")
-    success_count, fail_count = 0, 0
-    for user_id in user_ids:
-        try:
-            await context.bot.send_message(chat_id=user_id, text=message_to_broadcast, parse_mode=ParseMode.MARKDOWN)
-            success_count += 1
-        except Forbidden: fail_count += 1
-        except Exception: fail_count += 1
-        await asyncio.sleep(0.1)
-    await update.message.reply_text(f"✅ Broadcast Complete!\n\nSent: {success_count}\nFailed: {fail_count}")
-
-# --- Step 6: Main Function ---
+# --- Main Function ---
 def main():
     """Bot ko start aur run karne wala main function."""
-    if "YOUR_" in TOKEN or "YOUR_" in ADMIN_ID or "YOUR_" in MONGO_URI or "YOUR_" in GEMINI_API_KEY:
-        print("❌ Error: Zaroori variables (TOKEN, ADMIN_ID, MONGO_URI, GEMINI_API_KEY) set nahi hain!")
+    if not all([TOKEN, ADMIN_ID, MONGO_URI, OPENROUTER_API_KEY]):
+        print("❌ Error: Zaroori Environment Variables set nahi hain!")
         return
 
     if not setup_dependencies():
-        print("❌ Database setup fail ho gaya. Bot band ho raha hai.")
+        print("❌ Bot band ho raha hai kyunki dependencies setup nahi ho paayin.")
         return
 
     port = int(os.environ.get('PORT', 8080))
@@ -232,7 +192,6 @@ def main():
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
-    application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_handler))
 
     print("✅ Bot polling shuru ho gaya hai...")
