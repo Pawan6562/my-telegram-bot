@@ -1,4 +1,6 @@
+# requirements.txt
+
 python-telegram-bot
 pymongo
 flask
-google-generativeai
+openai
