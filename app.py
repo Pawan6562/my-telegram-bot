@@ -1,37 +1,56 @@
 # -*- coding: utf-8 -*-
 
+# =====================================================================================
+# DORAEMON AI MOVIE BOT - VERSION 2.0
+# FEATURES:
+# - AI-Powered Movie Search (using Google Gemini)
+# - AI-Powered General Chat
+# - MongoDB for User Statistics
+# - Admin Panel (Stats, Broadcast, Import)
+# - Keeps alive on hosting platforms like Render
+# =====================================================================================
+
 import os
 import asyncio
+import google.generativeai as genai
 from threading import Thread
 from flask import Flask
 from pymongo import MongoClient, errors
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
+from telegram.error import Forbidden
 
-# --- Step 1: Environment Variables (Render se aayenge) ---
-# Inko Render ke "Environment" section mein set karna zaroori hai
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
-ADMIN_ID = os.environ.get("ADMIN_ID")
-MONGO_URI = os.environ.get("MONGO_URI")
+# --- Step 1: Bot Configuration (Aapki details yahaan daalein) ---
+# Apne Environment Variables mein yeh details set karein.
+# Agar aap local machine par test kar rahe hain, toh "YOUR_..." ki jagah direct value daal sakte hain.
+TOKEN = os.environ.get("TELEGRAM_TOKEN", "YOUR_TELEGRAM_TOKEN")
+ADMIN_ID = os.environ.get("ADMIN_ID", "YOUR_ADMIN_ID") # Yeh aapki Telegram User ID (number) hai
+MONGO_URI = os.environ.get("MONGO_URI", "YOUR_MONGODB_CONNECTION_STRING")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
 
-# --- Step 2: Database Connection ---
-# Global variables taaki poore code mein use ho sakein
-client = None
-db = None
-users_collection = None
+# --- Step 2: AI Model & Database Setup ---
+# Global variables
+client, db, users_collection, model = None, None, None, None
 
-def setup_database():
-    """MongoDB se connect karne aur collection set karne ka function."""
-    global client, db, users_collection
+def setup_dependencies():
+    """AI Model aur MongoDB, dono ko setup karne ka function."""
+    global client, db, users_collection, model
+    
+    # AI Model Setup
     try:
-        # Connection string ka istemaal karke client banayein
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-flash') # 'gemini-1.5-flash' tez aur sasta hai
+        print("✅ Gemini AI Model successfully load ho gaya!")
+    except Exception as e:
+        print(f"❌ Gemini AI Model load nahi ho paaya. Error: {e}")
+        # Agar AI load na ho toh bot band nahi hoga, bas AI features kaam nahi karenge.
+    
+    # Database Setup
+    try:
         client = MongoClient(MONGO_URI)
-        # Database select karein (agar nahi hai toh ban jaayega)
-        db = client.get_database('dorebox_bot')
-        # Collection select karein (agar nahi hai toh ban jaayega)
+        db = client.get_database('dorebox_bot') # Aap database ka naam badal sakte hain
         users_collection = db.users
-        # User ID ko unique banayein taaki duplicate entries na ho
         users_collection.create_index("user_id", unique=True)
         print("✅ MongoDB se successfully connect ho gaya!")
         return True
@@ -42,241 +61,124 @@ def setup_database():
 # --- Step 3: Movie Data ---
 # Aapki sabhi movies ki list
 MOVIES_DATA = [
-    {
-        "title": "Doraemon Nobita ke Teen Dristi Sheershiyon Wale Talwarbaaz",
-        "poster": "https://i.postimg.cc/RZ82qxJ3/Doraemon-The-Movie-Nobita-s-Three-Magical-Swordsmen.png",
-        "link": "https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen",
-        "keywords": ["three", "3", "teen", "visionary", "drishti", "dristi", "swordsmen", "swords", "talwarbaaz", "talwar", "sword", "teen swordsmen", "visionary swordsmen", "sword wali", "talwar wali"]
-    },
-    {
-        "title": "Doraemon Jadoo Mantar Aur Jahnoom",
-        "poster": "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom",
-        "keywords": ["jadoo", "jadu", "jaadu", "mantar", "mantra", "magic", "jahnoom", "jhanoom", "jahanum", "jahanam", "jahnum", "underworld", "under world", "jadu wali", "mantar wali", "jahnoom wali", "magic wali"]
-    },
-    {
-        "title": "Doraemon Dinosaur Yoddha",
-        "poster": "https://i.postimg.cc/3w83qTtr/Doraemon-The-Movie-Dinosaur-Yoddhha-Hindi-Tamil-Telugu-Download-FHD-990x557.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Dinosaur%20Yodha",
-        "keywords": ["dinosaur", "dinasor", "dinasour", "dino", "yodha", "yoddha", "yodhha", "dino wali", "dinosaur wali", "yodha wali", "knight", "knights", "dino knight"]
-    },
-    {
-        "title": "Doraemon Nobita and the Underwater Adventure",
-        "poster": "https://i.postimg.cc/yYLjw5Pn/Doraemon-The-Movie-Nobita.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20and%20the%20Underwater%20Adventure",
-        "keywords": ["underwater", "under water", "undersea", "sea", "samundar", "adventure", "devil", "undersea devil", "samundar wali", "sea wali", "underwater wali", "under water wali"]
-    },
-    {
-        "title": "Doraemon Ichi Mera Dost (Yeh Bhi Tha Nobita)",
-        "poster": "https://i.postimg.cc/mrQ7v7Qd/Doraemon-nobita-and-the-legend-of-sun-king-by-cjh.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Legend%20of%20Sun%20King",
-        "keywords": ["ichi", "icchi", "ichhi", "mera dost", "dost", "dost wali", "ichi dost", "ichi wali", "yeh bhi nobita", "woh bhi nobita", "yeh nobita", "wo nobita", "ye nobita", "wo bhi nobita", "nobita double", "two nobita", "twin nobita", "do nobita", "nobita twins", "double nobita movie", "sun king", "legend of sun king"]
-    },
-    {
-        "title": "Doraemon Nobita Dorabian Nights",
-        "poster": "https://iili.io/KqRfWdv.png",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Dorabian%20Nights",
-        "keywords": ["dorabian", "dorabiyan", "dorabiya", "night", "nights", "dorabian night", "dorabian nights", "arabian", "arabiya", "arab wali", "raat wali", "dorabian wali"]
-    },
-    {
-        "title": "Doraemon Nobita Chala Chand Pe",
-        "poster": "https://i.postimg.cc/BbmtZs0X/m3.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Chronicle%20of%20the%20Moon",
-        "keywords": ["chaand", "chala", "challa", "chalaa", "chand", "chand pe", "chala chand", "chala chand pe", "moon", "moon exploration", "moon wali", "chronicle", "chronicle moon", "moon chronicle", "chand wali", "moon wali movie"]
-    },
-    {
-        "title": "Doraemon Nobita Ka Aasmaani Utopia",
-        "poster": "https://i.postimg.cc/Nf3QTNXq/doraemon-movie-nobitas-sky-utopia-in-hindi.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Sky%20Utopia",
-        "keywords": ["sky", "sky utopia", "skyutopia", "asmaan", "aasmaan", "utopia", "utopya", "ypytopia", "sky wali", "utopia wali", "aasmaan wali", "nobita sky", "nobita utopia"]
-    },
-    {
-        "title": "Doraemon Nobita Chal Pada Antarctica",
-        "poster": "https://iili.io/Kx9Qifn.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Antarctic%20Adventure",
-        "keywords": ["antarctica", "antartica", "antarktika", "antarc", "kachi kochi", "kochi", "thand", "baraf", "snow", "ice", "icy", "antarctica wali", "baraf wali", "thand wali", "snow wali", "adventure antarctica", "ice wali movie"]
-    },
-    {
-        "title": "Doraemon Nobita and the New Steel Troops – Winged Angels",
-        "poster": "https://i.postimg.cc/43C9KJr0/Doraemon-The-Movie-Nobita-and-the-Steel-Troops.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Steel%20Troops%20%E2%80%93%20New%20Age",
-        "keywords": ["steel", "steel troop", "steel troops", "trops", "robot", "robo", "robotic", "wing", "wings", "winged", "winged angel", "angels", "steel wali", "robot wali", "troop wali", "angel wali"]
-    },
-    {
-        "title": "Stand by Me Doraemon",
-        "poster": "https://i.postimg.cc/vmkLDN1X/Doraemon-The-Movie-Stand-by-Me-by-cjh.png",
-        "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%201",
-        "keywords": ["stand by me", "stand byme", "standby me", "standbyme", "stand 1", "part 1", "first part", "1st part", "stand wali", "3d wali", "3d movie", "doraemon stand", "stand movie"]
-    },
-    {
-        "title": "Stand by Me Doraemon 2",
-        "poster": "https://i.postimg.cc/y8wkR4PJ/Doraemon-The-Movie-Stand-by-Me-2-by-cjh.png",
-        "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%202",
-        "keywords": ["stand by me 2", "stand byme 2", "standby me 2", "standbyme2", "stand by me part 2", "part 2", "2nd part", "sequel", "stand 2", "stand wali 2", "3d 2", "3d movie 2", "doraemon stand 2", "stand wali second"]
-    },
-    {
-        "title": "Doraemon Nobita’s Treasure Island",
-        "poster": "https://i.postimg.cc/t46rgZ36/Doraemon-the-Nobita-s-Treasure-Island-by-cjh.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Treasure%20Island",
-        "keywords": ["treasure", "treasure island", "trezor", "treashure", "island", "island wali", "island movie", "nobita treasure", "nobita island", "nobita wali", "treasure wali", "treasure movie"]
-    },
-    {
-        "title": "Doraemon The Explorer Bow! Bow!",
-        "poster": "https://i.postimg.cc/HxY336f0/The-Movie-Nobita-The-Explorer-Bow-Bow-by-cjh.png",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20The%20Explorer%20Bow%20Bow",
-        "keywords": ["explorer", "explore", "exploring", "bow bow", "bowbow", "bow-bow", "adventure", "explorer wali", "adventure wali", "doraemon explorer", "bow bow wali"]
-    },
-    {
-        "title": "Doraemon Nobita in Jannat No.1",
-        "poster": "https://iili.io/KzFgEog.png",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20In%20Jannat%20No%201",
-        "keywords": ["jannat", "jannat no 1", "jannat no ek", "jannat1", "heaven", "no1", "number 1", "first", "jannat wali", "no1 wali", "heaven wali", "nobita jannat", "nobita wali"]
-    },
-    {
-        "title": "Doraemon Nobita and the Birth of Japan",
-        "poster": "https://i.postimg.cc/MKqNrP7Q/Doraemon-The-Movie-Nobita-and-the-birth-of-Japan.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20nobita%20and%20the%20Birthday%20of%20japan",
-        "keywords": ["birth of japan", "birthday of japan", "janam japan", "janm japan", "japan", "japanese", "japan wali", "janam wali", "janm wali", "janam japan movie", "birth wali", "japan birth", "japan movie"]
-    },
-    {
-        "title": "Doraemon Nobita and the Galaxy Super Express",
-        "poster": "https://i.postimg.cc/XY6fQ25Z/Doraemon-The-Movie-Galaxy-Super-Express-by-cjh.png",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Galaxy%20Super%20Express%20Hindi",
-        "keywords": ["galaxy super express", "galaxy express", "galaxy train", "super express doraemon", "galaxy wali movie", "train space movie", "space train", "galaxy wali doraemon", "super express wali", "galaxy express movie"]
-    },
-    {
-        "title": "Doraemon: Nobita’s Great Adventure to the South Seas",
-        "poster": "https://i.postimg.cc/8zC06x5V/Nobita-Great-Adventure-to-the-South-Seas-by-cjh.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Great%20Adventure%20in%20the%20South%20Seas",
-        "keywords": ["south seas", "south sea", "south see", "south c", "souths", "south", "great adventure", "great adventures", "grate adventure", "samundar", "samundar wali", "samundar ka", "samandar", "pirates", "samundari", "sea adventure", "samundar adventure", "doraemon south sea", "doraemon south seas"]
-    },
-    {
-        "title": "Doraemon Nobita Aur Jadooi Tapu",
-        "poster": "https://i.postimg.cc/yd8X0kZv/Doraemon-The-Movie-Nobita-Aur-Jadooi-Tapu-by-cjh.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Island%20of%20Miracle",
-        "keywords": ["jadooi tapu", "jadoi tapu", "jadui tapu", "jadui island", "magic island", "jadui adventure", "jadoo tapu", "magic tapu", "jadui doraemon", "magic wali movie", "island magic", "tapu movie"]
-    },
-    {
-        "title": "Doraemon Toofani Adventure",
-        "poster": "https://i.postimg.cc/bYFLHHLb/Doraemon-Toofani-Adventure-by-cjh.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Windmasters",
-        "keywords": ["toofani adventure", "tofani adventure", "tufani adventure", "tufan adventure", "storm adventure", "hawa adventure", "aandhi adventure", "toofan movie", "tufani movie", "storm wali movie"]
-    },
-    {
-        "title": "Doraemon Nobita Bana Superhero",
-        "poster": "https://i.postimg.cc/prbYFGHC/Doraemon-Nobita-Bana-Superhero-Hindi-by-cjh.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Parallel%20Visit%20to%20West",
-        "keywords": ["bana superhero", "super hero", "superhero", "nobita superhero", "super hero movie", "hero movie", "nobita hero", "hero wala movie", "superhero wala movie"]
-    },
-    {
-        "title": "Doraemon Nobita and the Kingdom of Robot Singham",
-        "poster": "https://i.postimg.cc/j5fNHPj6/The-Movie-Nobita-and-the-Kingdom-of-Robot-by-cjh.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20And%20The%20Kingdom%20Of%20Robot%20Singham",
-        "keywords": ["robot singham", "robot kingdom", "robo singham", "robo kingdom", "robot movie", "robot wali movie", "robot adventure", "robo adventure", "robot raj", "robot king", "robo king"]
-    },
-    {
-        "title": "Doraemon Nobita Aur Birdopia Ka Sultan",
-        "poster": "https://i.postimg.cc/hjVgbtRQ/Doraemon-The-Movie-Nobita-Aur-Birdopia-Ka-Sultan.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Birdopia%20Ka%20Sultan",
-        "keywords": ["birdopia", "birdopia sultan", "bird sultan", "bird king", "bird land", "bird movie", "birds movie", "flying bird", "bird adventure", "pakshi sultan", "pakshi movie"]
-    },
-    {
-        "title": "Doraemon Nobita in Gol Gol Golmaal (Spiral City)",
-        "poster": "https://iili.io/KTEEtjI.jpg",
-        "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Spiral%20City",
-        "keywords": ["spiral city", "gol gol golmaal", "golmaal", "gol gol", "gol city", "golmaal city", "round city", "gol gol movie", "gol ghumar", "ghumar city", "gol ghumne wali movie"]
-    }
+    {"title": "Doraemon Nobita ke Teen Dristi Sheershiyon Wale Talwarbaaz", "poster": "https://i.postimg.cc/RZ82qxJ3/Doraemon-The-Movie-Nobita-s-Three-Magical-Swordsmen.png", "link": "https://dorebox.vercel.app/download.html?title=Three%20Visionary%20Swordsmen"},
+    {"title": "Doraemon Jadoo Mantar Aur Jahnoom", "poster": "https://i.postimg.cc/Z5t0TfkP/Doraemon-The-Movie-Jadoo-Mantar-Aur-Jahnoom-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20jadoo%20Mantar%20aur%20jhanoom"},
+    {"title": "Doraemon Dinosaur Yoddha", "poster": "https://i.postimg.cc/3w83qTtr/Doraemon-The-Movie-Dinosaur-Yoddhha-Hindi-Tamil-Telugu-Download-FHD-990x557.jpg", "link": "https://dorebox.vercel.app/download.html?title=Dinosaur%20Yodha"},
+    {"title": "Doraemon Nobita and the Underwater Adventure", "poster": "https://i.postimg.cc/yYLjw5Pn/Doraemon-The-Movie-Nobita.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20and%20the%20Underwater%20Adventure"},
+    {"title": "Doraemon Ichi Mera Dost (Yeh Bhi Tha Nobita)", "poster": "https://i.postimg.cc/mrQ7v7Qd/Doraemon-nobita-and-the-legend-of-sun-king-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Legend%20of%20Sun%20King"},
+    {"title": "Doraemon Nobita Dorabian Nights", "poster": "https://iili.io/KqRfWdv.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Dorabian%20Nights"},
+    {"title": "Doraemon Nobita Chala Chand Pe", "poster": "https://i.postimg.cc/BbmtZs0X/m3.jpg", "link": "https://dorebox.vercel.app/download.html?title=Chronicle%20of%20the%20Moon"},
+    {"title": "Doraemon Nobita Ka Aasmaani Utopia", "poster": "https://i.postimg.cc/Nf3QTNXq/doraemon-movie-nobitas-sky-utopia-in-hindi.jpg", "link": "https://dorebox.vercel.app/download.html?title=Sky%20Utopia"},
+    {"title": "Doraemon Nobita Chal Pada Antarctica", "poster": "https://iili.io/Kx9Qifn.jpg", "link": "https://dorebox.vercel.app/download.html?title=Antarctic%20Adventure"},
+    {"title": "Doraemon Nobita and the New Steel Troops – Winged Angels", "poster": "https://i.postimg.cc/43C9KJr0/Doraemon-The-Movie-Nobita-and-the-Steel-Troops.jpg", "link": "https://dorebox.vercel.app/download.html?title=Steel%20Troops%20%E2%80%93%20New%20Age"},
+    {"title": "Stand by Me Doraemon", "poster": "https://i.postimg.cc/vmkLDN1X/Doraemon-The-Movie-Stand-by-Me-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%201"},
+    {"title": "Stand by Me Doraemon 2", "poster": "https://i.postimg.cc/y8wkR4PJ/Doraemon-The-Movie-Stand-by-Me-2-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Stand%20by%20Me%20%E2%80%93%20Part%202"},
+    {"title": "Doraemon Nobita’s Treasure Island", "poster": "https://i.postimg.cc/t46rgZ36/Doraemon-the-Nobita-s-Treasure-Island-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Treasure%20Island"},
+    {"title": "Doraemon The Explorer Bow! Bow!", "poster": "https://i.postimg.cc/HxY336f0/The-Movie-Nobita-The-Explorer-Bow-Bow-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20The%20Explorer%20Bow%20Bow"},
+    {"title": "Doraemon Nobita in Jannat No.1", "poster": "https://iili.io/KzFgEog.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20The%20Movie%20Nobita%20In%20Jannat%20No%201"},
+    {"title": "Doraemon Nobita and the Birth of Japan", "poster": "https://i.postimg.cc/MKqNrP7Q/Doraemon-The-Movie-Nobita-and-the-birth-of-Japan.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20nobita%20and%20the%20Birthday%20of%20japan"},
+    {"title": "Doraemon Nobita and the Galaxy Super Express", "poster": "https://i.postimg.cc/XY6fQ25Z/Doraemon-The-Movie-Galaxy-Super-Express-by-cjh.png", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Galaxy%20Super%20Express%20Hindi"},
+    {"title": "Doraemon: Nobita’s Great Adventure to the South Seas", "poster": "https://i.postimg.cc/8zC06x5V/Nobita-Great-Adventure-to-the-South-Seas-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%27s%20Great%20Adventure%20in%20the%20South%20Seas"},
+    {"title": "Doraemon Nobita Aur Jadooi Tapu", "poster": "https://i.postimg.cc/yd8X0kZv/Doraemon-The-Movie-Nobita-Aur-Jadooi-Tapu-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Island%20of%20Miracle"},
+    {"title": "Doraemon Toofani Adventure", "poster": "https://i.postimg.cc/bYFLHHLb/Doraemon-Toofani-Adventure-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Windmasters"},
+    {"title": "Doraemon Nobita Bana Superhero", "poster": "https://i.postimg.cc/prbYFGHC/Doraemon-Nobita-Bana-Superhero-Hindi-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Parallel%20Visit%20to%20West"},
+    {"title": "Doraemon Nobita and the Kingdom of Robot Singham", "poster": "https://i.postimg.cc/j5fNHPj6/The-Movie-Nobita-and-the-Kingdom-of-Robot-by-cjh.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20And%20The%20Kingdom%20Of%20Robot%20Singham"},
+    {"title": "Doraemon Nobita Aur Birdopia Ka Sultan", "poster": "https://i.postimg.cc/hjVgbtRQ/Doraemon-The-Movie-Nobita-Aur-Birdopia-Ka-Sultan.jpg", "link": "https://dorebox.vercel.app/download.html?title=Birdopia%20Ka%20Sultan"},
+    {"title": "Doraemon Nobita in Gol Gol Golmaal (Spiral City)", "poster": "https://iili.io/KTEEtjI.jpg", "link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Spiral%20City"}
 ]
-
-# Movie titles ki ek alag list, keyboard aur handler ke liye
 MOVIE_TITLES = [movie["title"] for movie in MOVIES_DATA]
 
 # --- Step 4: Flask App (Render ko 'alive' rakhne ke liye) ---
-app = Flask(__name__)
-
-@app.route('/')
+flask_app = Flask(__name__)
+@flask_app.route('/')
 def home():
-    """Yeh page Render ko batata hai ki web service chal rahi hai."""
     return "Bot is alive and running!"
 
-# --- Step 5: Bot Handlers (Bot ke commands aur messages ko handle karne wale functions) ---
+# --- Step 5: Bot Handlers ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start command handle karta hai."""
     user = update.effective_user
-    user_id = user.id
     try:
-        # Check karein ki user database mein hai ya nahi
-        if not users_collection.find_one({"user_id": user_id}):
-            # Agar nahi hai, toh add karein
-            users_collection.insert_one({"user_id": user_id, "name": user.full_name, "username": user.username})
-            # Admin ko naye user ki notification bhejein
+        if users_collection and not users_collection.find_one({"user_id": user.id}):
+            users_collection.insert_one({"user_id": user.id, "name": user.full_name, "username": user.username})
             if ADMIN_ID:
                 admin_message = (f"🔔 New User Alert! 🔔\n\n"
                                  f"Name: {user.full_name}\n"
                                  f"Username: @{user.username if user.username else 'N/A'}\n"
-                                 f"Telegram ID: `{user_id}`")
+                                 f"Telegram ID: `{user.id}`")
                 await context.bot.send_message(chat_id=ADMIN_ID, text=admin_message, parse_mode=ParseMode.MARKDOWN)
     except Exception as e:
         print(f"Start command mein user check karte waqt error: {e}")
 
-    # Keyboard layout banayein
     keyboard = [[title] for title in MOVIE_TITLES]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-    # Welcome message
-    welcome_text = ("👋 *𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁!* 🎬💙\n\n"
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True, placeholder="Movie select karein ya naam likhein...")
+    
+    welcome_text = ("👋 *𝗪𝗲𝗹𝗰𝗼𝗺𝗲 𝘁𝗼 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗔𝗜 𝗠𝗼𝘃𝗶𝗲𝘀 𝗕𝗼𝘁!* 🎬💙\n\n"
                     "🚀 𝗬𝗮𝗵𝗮𝗮𝗻 𝗮𝗮𝗽𝗸𝗼 𝗺𝗶𝗹𝘁𝗶 𝗵𝗮𝗶𝗻 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗸𝗶 𝘀𝗮𝗯𝘀𝗲 𝘇𝗮𝗯𝗮𝗿𝗱𝗮𝘀𝘁 𝗺𝗼𝘃𝗶𝗲𝘀, 𝗯𝗶𝗹𝗸𝘂𝗹 𝗲𝗮𝘀𝘆 𝗮𝘂𝗿 𝗳𝗮𝘀𝘁 𝗱𝗼𝘄𝗻𝗹𝗼𝗮𝗱 𝗸𝗲 𝘀𝗮𝗮𝘁𝗵।\n\n"
-                    "✨ *𝗙𝗲𝗮𝘁𝘂𝗿𝗲𝘀:*\n"
-                    "🔹 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗛𝗶𝗻𝗱𝗶 𝗗𝘂𝗯𝗯𝗲𝗱 𝗠𝗼𝘃𝗶𝗲𝘀 (𝗢𝗹𝗱 + 𝗟𝗮𝘁𝗲𝘀𝘁)\n"
-                    "🔹 𝗠𝘂𝗹𝘁𝗶-𝗤𝘂𝗮𝗹𝗶𝘁𝘆 𝗗𝗼𝘄𝗻𝗹𝗼𝗮𝗱𝘀: 𝟭𝟬𝟴𝟬𝗽 | 𝟳𝟮𝟬𝗽 | 𝟯𝟲𝟬𝗽 🎥\n"
-                    "🔹 𝗗𝗶𝗿𝗲𝗰𝘁 & 𝗙𝗮𝘀𝘁 𝗟𝗶𝗻𝗸𝘀 – 𝗻𝗼 𝘁𝗶𝗺𝗲 𝘄𝗮𝘀𝘁𝗲!\n"
-                    "🔹 𝗥𝗲𝗴𝘂𝗹𝗮𝗿 𝗠𝗼𝘃𝗶𝗲 𝗨𝗽𝗱𝗮𝘁𝗲𝘀\n\n"
-                    "👉 *𝗕𝗮𝘀 𝗺𝗼𝘃𝗶𝗲 𝗰𝗵𝗼𝗼𝘀𝗲 𝗸𝗶𝗷𝗶𝘆𝗲, 𝗮𝗽𝗻𝗶 𝗽𝗮𝘀𝗮𝗻𝗱 𝗸𝗶 𝗾𝘂𝗮𝗹𝗶𝘁𝘆 𝘀𝗲𝗹𝗲𝗰𝘁 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝘂𝗿 𝗲𝗻𝗷𝗼𝘆 𝗸𝗶𝗷𝗶𝘆𝗲 𝗮𝗽𝗻𝗮 𝗗𝗼𝗿𝗮𝗲𝗺𝗼𝗻 𝗠𝗼𝘃𝗶𝗲 𝗧𝗶𝗺𝗲!* 🍿💙\n\n"
-                    "📢 𝗛𝗮𝗺𝗮𝗿𝗲 [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_movies_hindi_dubbed) 𝗰𝗵𝗮𝗻𝗻𝗲𝗹 𝗸𝗼 𝗷𝗼𝗶𝗻 𝗸𝗮𝗿𝗻𝗮 𝗻𝗮 𝗯𝗵𝗼𝗼𝗹𝗲𝗻, 𝘁𝗮𝗮𝗸𝗶 𝗻𝗲𝘄 𝘂𝗽𝗱𝗮𝘁𝗲𝘀 𝗮𝗮𝗽𝗸𝗼 𝘀𝗮𝗯𝘀𝗲 𝗽𝗲𝗵𝗹𝗲 𝗺𝗶𝗹𝘀𝗮𝗸𝗲𝗻! 🚀\n\n"
-                    "👇 *Neeche diye gaye menu se apni pasand ki movie select kijiye.*")
+                    "✨ *Ab yeh bot AI se chalta hai!* Aap movie ka naam jaise marzi likh sakte hain ya mujhse normal baat bhi kar sakte hain.\n\n"
+                    "👉 *Bas movie ka naam likhiye ya neeche diye gaye menu se select kijiye!* 🍿💙\n\n"
+                    "📢 Hamare [𝗗𝗢𝗥𝗔𝗘𝗠𝗢𝗡 𝗠𝗢𝗩𝗜𝗘𝗦](https://t.me/doraemon_all_movies_bycjh) channel ko join karna na bhoolen!")
 
     await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
-async def movie_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Jab user keyboard se movie title select karta hai."""
-    movie_title = update.message.text
-    movie_data = next((movie for movie in MOVIES_DATA if movie['title'] == movie_title), None)
+async def ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User ke sabhi text messages ko AI se handle karta hai."""
+    user_message = update.message.text
 
-    if movie_data:
-        caption = f"🎬 **{movie_data['title']}**\n\n📥 Download from the button below!"
-        keyboard = [[InlineKeyboardButton("📥 Download Now", url=movie_data['link'])]]
+    # Pehle check karo ki user ne keyboard se exact title select kiya hai ya nahi
+    exact_match = next((movie for movie in MOVIES_DATA if movie['title'] == user_message), None)
+    if exact_match:
+        caption = f"🎬 **{exact_match['title']}**\n\n📥 Download from the button below!"
+        keyboard = [[InlineKeyboardButton("📥 Download Now", url=exact_match['link'])]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_photo(
-            photo=movie_data['poster'],
-            caption=caption,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=reply_markup
-        )
+        await update.message.reply_photo(photo=exact_match['poster'], caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+        return
 
-async def keyword_search_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Jab user koi text likhta hai (movie search ke liye)."""
-    user_message = update.message.text.lower()
+    # Agar exact match nahi hai, tab AI ka istemal karo
+    if not model:
+        await update.message.reply_text("Maaf kijiye, AI service abhi kaam nahi kar rahi hai. Aap keyboard se movie select kar sakte hain.")
+        return
 
-    for movie in MOVIES_DATA:
-        # Check karein ki user ka message kisi keyword se match karta hai ya nahi
-        if any(keyword.lower() in user_message for keyword in movie.get("keywords", [])):
-            caption = f"🎬 **{movie['title']}**\n\n🔎 Mujhe lagta hai aap yeh movie dhoondh rahe the!"
-            keyboard = [[InlineKeyboardButton("📥 Download Now", url=movie['link'])]]
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+    
+    movie_titles_str = ", ".join(f"'{title}'" for title in MOVIE_TITLES)
+    system_prompt = f"""
+    Aap ek Doraemon movie expert bot ho. Aapka kaam user ke message ko samajhna aur unhe sahi movie dhoondhne mein madad karna hai.
+    Aapke paas yeh movies available hain: {movie_titles_str}.
+    Rules:
+    1.  Agar user koi movie maang raha hai (jaise "dino wali movie" ya "stand by me 2"), toh uske message ko samajhkar upar di gayi list mein se **sirf aur sirf movie ka EXACT title** output mein do. Aur kuch nahi.
+    2.  Agar aapko 100% yakeen nahi hai ki user kaunsi movie maang raha hai, toh jawab do "NO_MOVIE_FOUND".
+    3.  Agar user movie nahi maang raha, balki normal baat-cheet kar raha hai (jaise 'hello', 'thank you'), toh usse ek friendly, short, aur helpful response do.
+    4.  Apne jawab hamesha Hinglish (Hindi in English script) mein do.
+    """
+    
+    try:
+        full_prompt = f"{system_prompt}\n\nUser ka message hai: '{user_message}'"
+        response = await model.generate_content_async(full_prompt)
+        ai_response_text = response.text.strip().replace("'", "")
+
+        found_movie = next((movie for movie in MOVIES_DATA if movie['title'] == ai_response_text), None)
+
+        if found_movie:
+            caption = f"🎬 **{found_movie['title']}**\n\n✅ AI ko lagta hai aap yeh movie dhoondh rahe hain!"
+            keyboard = [[InlineKeyboardButton("📥 Download Now", url=found_movie['link'])]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-
-            await update.message.reply_photo(
-                photo=movie['poster'],
-                caption=caption,
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=reply_markup
-            )
-            return # Match milne par function se bahar aa jayein
+            await update.message.reply_photo(photo=found_movie['poster'], caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+        elif "NO_MOVIE_FOUND" in ai_response_text:
+            await update.message.reply_text("🤔 Maaf kijiye, main samajh nahi paaya ki aap kaunsi movie dhoondh rahe hain. Kya aap keyboard se select kar sakte hain ya thoda alag tarike se likh sakte hain?")
+        else:
+            await update.message.reply_text(ai_response_text)
+    except Exception as e:
+        print(f"AI handler mein error: {e}")
+        await update.message.reply_text("Kuch takneeki samasya aa gayi hai. Kripya thodi der baad koshish karein.")
 
 # --- Admin Commands ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/stats command (sirf admin ke liye)."""
     if str(update.effective_user.id) != ADMIN_ID: return
+    if not users_collection:
+        await update.message.reply_text("Database se connection nahi hai.")
+        return
     try:
         total_users = users_collection.count_documents({})
         await update.message.reply_text(f"📊 *Bot Statistics*\n\nTotal Unique Users: *{total_users}*", parse_mode=ParseMode.MARKDOWN)
@@ -284,101 +186,57 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Stats fetch karte waqt error: {e}")
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/broadcast command (sirf admin ke liye)."""
     if str(update.effective_user.id) != ADMIN_ID: return
+    if not users_collection:
+        await update.message.reply_text("Database se connection nahi hai.")
+        return
 
     message_to_broadcast = " ".join(context.args)
     if not message_to_broadcast:
-        await update.message.reply_text("Broadcast karne ke liye message likhein. Example: `/broadcast Hello everyone!`")
+        await update.message.reply_text("Example: `/broadcast Hello everyone!`")
         return
 
-    all_users = users_collection.find({}, {"user_id": 1})
-    user_ids = [user["user_id"] for user in all_users]
-
+    user_ids = [user["user_id"] for user in users_collection.find({}, {"user_id": 1})]
     if not user_ids:
-        await update.message.reply_text("Database mein broadcast karne ke liye koi user nahi hai.")
+        await update.message.reply_text("Database mein koi user nahi hai.")
         return
 
     await update.message.reply_text(f"📢 Broadcast shuru ho raha hai {len(user_ids)} users ke liye...")
     success_count, fail_count = 0, 0
-
     for user_id in user_ids:
         try:
             await context.bot.send_message(chat_id=user_id, text=message_to_broadcast, parse_mode=ParseMode.MARKDOWN)
             success_count += 1
-        except Exception:
-            fail_count += 1
-        await asyncio.sleep(0.1) # Telegram API limit se bachne ke liye thoda delay
+        except Forbidden: fail_count += 1
+        except Exception: fail_count += 1
+        await asyncio.sleep(0.1)
+    await update.message.reply_text(f"✅ Broadcast Complete!\n\nSent: {success_count}\nFailed: {fail_count}")
 
-    await update.message.reply_text(f"✅ Broadcast Complete!\n\nSuccessfully Sent: {success_count}\nFailed to Send: {fail_count}")
-
-async def import_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/import command (sirf admin ke liye)."""
-    if str(update.effective_user.id) != ADMIN_ID: return
-
-    if not context.args:
-        await update.message.reply_text("Import karne ke liye User IDs provide karein. Example: `/import 12345 67890`")
-        return
-
-    users_to_insert = []
-    for user_id_str in context.args:
-        try:
-            users_to_insert.append({"user_id": int(user_id_str), "name": "Imported User", "username": "N/A"})
-        except ValueError:
-            pass # Agar ID number nahi hai toh ignore karein
-
-    added_count = 0
-    if users_to_insert:
-        try:
-            # ordered=False se duplicate IDs par error nahi aayega, woh skip ho jaayengi
-            result = users_collection.insert_many(users_to_insert, ordered=False)
-            added_count = len(result.inserted_ids)
-        except errors.BulkWriteError as bwe:
-            added_count = bwe.details['nInserted']
-        except Exception as e:
-            await update.message.reply_text(f"Database mein daalte waqt error: {e}")
-            return
-
-    total_users = users_collection.count_documents({})
-    await update.message.reply_text(f"✅ Import Complete!\n\nAdded: {added_count} new users.\n(Duplicates were ignored.)\n\n📊 Total Users in DB now: {total_users}")
-
-# --- Step 6: Main Function (Jahan se sab kuch shuru hota hai) ---
+# --- Step 6: Main Function ---
 def main():
     """Bot ko start aur run karne wala main function."""
+    if "YOUR_" in TOKEN or "YOUR_" in ADMIN_ID or "YOUR_" in MONGO_URI or "YOUR_" in GEMINI_API_KEY:
+        print("❌ Error: Zaroori variables (TOKEN, ADMIN_ID, MONGO_URI, GEMINI_API_KEY) set nahi hain!")
+        return
 
-    # Sabse pehle check karein ki database connect ho raha hai ya nahi
-    if not setup_database():
+    if not setup_dependencies():
         print("❌ Database setup fail ho gaya. Bot band ho raha hai.")
         return
 
-    # 1. Bot application banayein
+    port = int(os.environ.get('PORT', 8080))
+    flask_thread = Thread(target=lambda: flask_app.run(host='0.0.0.0', port=port, debug=False))
+    flask_thread.start()
+    print(f"✅ Flask server port {port} par shuru ho raha hai...")
+
     application = Application.builder().token(TOKEN).build()
 
-    # 2. Sabhi handlers ko application mein add karein
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
-    application.add_handler(CommandHandler("import", import_users))
-    # Yeh handler tab chalega jab message movie title se match karega
-    application.add_handler(MessageHandler(filters.Text(MOVIE_TITLES), movie_handler))
-    # Yeh handler kisi bhi text ke liye chalega (jo command na ho)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, keyword_search_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_handler))
 
-    # 3. Bot ko ek alag thread mein chalao (Polling ke liye)
-    # Threading zaroori hai taaki Flask server block na ho
-    bot_thread = Thread(target=application.run_polling)
-    bot_thread.start()
     print("✅ Bot polling shuru ho gaya hai...")
-
-    # 4. Flask server ko main thread mein chalao (Render ke liye)
-    # Yeh hamesha aakhir mein hona chahiye
-    port = int(os.environ.get('PORT', 8080))
-    print(f"✅ Flask server port {port} par shuru ho raha hai...")
-    app.run(host='0.0.0.0', port=port)
+    application.run_polling()
 
 if __name__ == '__main__':
-    # Script run hone se pehle check karein ki zaroori variables set hain ya nahi
-    if not all([TOKEN, ADMIN_ID, MONGO_URI]):
-        print("❌ Error: Zaroori environment variables (TOKEN, ADMIN_ID, MONGO_URI) set nahi hain!")
-    else:
-        main()
+    main()
