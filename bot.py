@@ -20,7 +20,7 @@ MONGO_URI = os.environ.get("MONGO_URI")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
 # Model Name fix rakh sakte hain
-MODEL_NAME = "google/gemma-2-27b-it:free"
+MODEL_NAME = "google/gemma-3-27b-it:free"
 
 # --- Step 2: Database Connection ---
 client = None
