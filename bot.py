@@ -12,6 +12,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from telegram.constants import ParseMode
 
 # --- Step 1: Configuration ---
+# Agar local PC pe run kar raha hai aur env set nahi hai, to MONGO_URI yahan direct paste kar (String me)
+# Par deploy karte waqt wapas os.environ wala use karna secure rehta hai.
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 ADMIN_ID = os.environ.get("ADMIN_ID")
 MONGO_URI = os.environ.get("MONGO_URI")
@@ -30,23 +32,25 @@ def setup_database():
     global client, db, users_collection
     
     if not MONGO_URI:
-        print("❌ Error: MONGO_URI environment variable missing hai!")
+        print("❌ Error: MONGO_URI environment variable missing hai! Database connect nahi hoga.")
         return False
 
     try:
+        # Connect to MongoDB
         client = MongoClient(MONGO_URI)
+        # Check connection
+        client.admin.command('ping')
+        
         db = client.get_database('dorebox_bot')
         users_collection = db.users
         users_collection.create_index("user_id", unique=True)
-        print("✅ MongoDB Connected!")
+        print("✅ MongoDB Connected Successfully!")
         return True
     except Exception as e:
-        print(f"❌ MongoDB Error: {e}")
+        print(f"❌ MongoDB Connection Error: {e}")
         return False
 
-# --- Step 3: FULL DATA SET (Updated) ---
-
-# 🎬 MOVIES LIST (34 Movies)
+# --- Step 3: FULL DATA SET ---
 MOVIES_DATA = [
     {"title": "Doraemon: Nobita's Earth Symphony", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%3A%20Nobita%27s%20Earth%20Symphony&type=movies"},
     {"title": "Doraemon Nobita and the Spiral City", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Spiral%20City&type=movies"},
@@ -84,7 +88,6 @@ MOVIES_DATA = [
     {"title": "Doraemon Nobita And The Kingdom Of Robot Singham", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20And%20The%20Kingdom%20Of%20Robot%20Singham&type=movies"}
 ]
 
-# 📺 SEASONS LIST (5 Seasons)
 SEASONS_DATA = [
     {"title": "Doraemon Season 1", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Season%201&type=episodes"},
     {"title": "Doraemon Season 2", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Season%202&type=episodes"},
@@ -93,13 +96,11 @@ SEASONS_DATA = [
     {"title": "Doraemon Season 5", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Season%205&type=episodes"}
 ]
 
-# Data Formatting for AI (Note: 'download_link' key use kiya hai)
 MOVIE_TEXT = "\n".join([f"- {m['title']}: {m['download_link']}" for m in MOVIES_DATA])
 SEASON_TEXT = "\n".join([f"- {s['title']}: {s['download_link']}" for s in SEASONS_DATA])
 
 ALL_CONTENT = f"MOVIES:\n{MOVIE_TEXT}\n\nSEASONS/EPISODES:\n{SEASON_TEXT}"
 
-# 🔥 UPDATED SYSTEM PROMPT
 SYSTEM_PROMPT = f"""You are 'DoreBox AI Bot'. 
 Creator: PAWAN (AJH Team).
 Website: dorebox.vercel.app
@@ -120,8 +121,7 @@ GUIDELINES:
 - DO NOT hallucinate links. Only use the list above.
 """
 
-# --- Step 4: AI Logic (Memory Enabled) ---
-
+# --- Step 4: AI Logic ---
 def get_ai_response(conversation_history):
     if not OPENROUTER_API_KEY:
         return "⚠️ Error: API Key missing."
@@ -160,7 +160,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "DoreBox AI Bot Running (Full Data Updated)"
+    return "DoreBox AI Bot Running"
 
 # --- Step 6: Bot Handlers ---
 
@@ -168,6 +168,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_histories[user.id] = [] # Reset Memory
     
+    # DB me user save karo
     try:
         if users_collection and not users_collection.find_one({"user_id": user.id}):
             users_collection.insert_one({"user_id": user.id, "name": user.full_name})
@@ -192,11 +193,17 @@ async def ai_chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_message = update.message.text
     
+    # 🔥 IMPORTANT FIX: 
+    # Agar message '/' se shuru ho raha hai (koi bhi command), to AI ko mat bhejo.
+    # Ye faltu API calls aur confusion rokega.
+    if user_message.startswith('/'):
+        return
+
     # Memory Logic
     if user_id not in user_histories: user_histories[user_id] = []
     user_histories[user_id].append({"role": "user", "content": user_message})
     
-    # Limit History to last 10 messages
+    # Limit History
     if len(user_histories[user_id]) > 10: user_histories[user_id] = user_histories[user_id][-10:]
     
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
@@ -210,27 +217,42 @@ async def ai_chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Admin Commands ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not ADMIN_ID or str(update.effective_user.id) != str(ADMIN_ID): return
-    if users_collection:
+    
+    # Pehle check karo DB connected hai ya nahi
+    if users_collection is None:
+        await update.message.reply_text("❌ DB Not Connected (Check MONGO_URI)")
+        return
+
+    try:
         count = users_collection.count_documents({})
         await update.message.reply_text(f"📊 Total Users: {count}")
-    else:
-        await update.message.reply_text("❌ DB Not Connected")
+    except Exception as e:
+        await update.message.reply_text(f"❌ DB Error: {e}")
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not ADMIN_ID or str(update.effective_user.id) != str(ADMIN_ID): return
+    
     msg = " ".join(context.args)
     if not msg: 
         await update.message.reply_text("Message empty hai!")
         return
     
-    if users_collection:
+    if users_collection is None:
+        await update.message.reply_text("❌ DB Not Connected (Check MONGO_URI)")
+        return
+    
+    try:
         users = users_collection.find({}, {"user_id": 1})
+        sent_count = 0
         for user in users:
             try:
                 await context.bot.send_message(chat_id=user["user_id"], text=msg)
-                await asyncio.sleep(0.05)
+                sent_count += 1
+                await asyncio.sleep(0.05) # Flood limit se bachne ke liye
             except: pass
-        await update.message.reply_text("✅ Broadcast Sent.")
+        await update.message.reply_text(f"✅ Broadcast Sent to {sent_count} users.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Broadcast Error: {e}")
 
 async def clear_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -243,19 +265,25 @@ def main():
         print("❌ Error: Bot Token Missing")
         return
     
-    if MONGO_URI: setup_database()
+    # DB Connect Try Karo
+    setup_database()
 
     port = int(os.environ.get('PORT', 8080))
     Thread(target=lambda: app.run(host='0.0.0.0', port=port, debug=False)).start()
 
     application = Application.builder().token(TOKEN).build()
+    
+    # Commands
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("reset", clear_memory))
+    
+    # AI Handler (Text)
+    # filters.TEXT & ~filters.COMMAND bhi laga hai, aur andar check bhi hai double safety ke liye.
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_chat_handler))
 
-    print("✅ DoreBox Bot Updated (Movies + Seasons)...")
+    print("✅ DoreBox Bot Started...")
     application.run_polling()
 
 if __name__ == '__main__':
