@@ -105,22 +105,66 @@ SEASON_TEXT = "\n".join([f"📺 {s['title']}\n🔗 {s['download_link']}" for s i
 ALL_CONTENT = f"MOVIES:\n{MOVIE_TEXT}\n\nSEASONS:\n{SEASON_TEXT}"
 
 # 🔥 MANUAL FALLBACK REPLIES (Jab 429 Error aaye)
+# 🔥 MANUAL FALLBACK REPLIES (Jab 429 Error aaye)
 FALLBACK_REPLIES = [
+    # --- Purane Wale ---
     "Maafi chaunga dost, aaj ka mera AI quota khatam ho gaya hai! 😓\nPar tension mat lo, aap hamari website pe jaake direct download kar sakte ho: https://dorebox.vercel.app",
     "Arre yaar, server thoda busy hai abhi. 🐢\nAap tab tak website check kar lo, wahan sab kuch milega: https://dorebox.vercel.app",
     "Bot thak gaya hai aaj ke liye! 😴\nKoi bhi movie ya episode chahiye to seedha yahan jao: https://dorebox.vercel.app",
     "Oye hoye! Itne messages ki limit hi cross ho gayi! 😅\nAap please website use kar lo abhi ke liye: https://dorebox.vercel.app",
     "Sorry bhai, AI abhi rest kar raha hai. 🛌\nAapko jo movie chahiye wo hamari site pe pakka milegi: https://dorebox.vercel.app",
-    "Oops! Daily limit reached. 🚫\nPar aapka entertainment nahi rukega! Yahan click karo: https://dorebox.vercel.app",
-    "AI Brain Overload! 🤯\nMujhe thoda break chahiye. Aap please website visit kar lo: https://dorebox.vercel.app",
-    "Mafi chahta hu, abhi main reply nahi padh paunga. 🤐\nDirect download links ke liye website dekho: https://dorebox.vercel.app",
-    "Bhai, aaj ke liye data khatam! 📉\nPar movies khatam nahi hui hain, website pe jao: https://dorebox.vercel.app",
-    "Mere dimaag ki batti gul ho gayi hai! 💡❌\nAap manual tareeke se yahan se download kar lo: https://dorebox.vercel.app",
-    "Server Error nahi, bas thoda traffic zyada hai! 🚦\nAap website try karo, wo fast hai: https://dorebox.vercel.app",
-    "Chota break le raha hu doston! ☕\nAap tab tak dorebox.vercel.app par movies enjoy karo!",
-    "Message nahi ja raha? Koi baat nahi! 🤷‍♂️\nWebsite hamesha open hai aapke liye: https://dorebox.vercel.app",
-    "Sorry Dost, aaj ka quota over. 🏁\nKal milte hain, tab tak website se download karo: https://dorebox.vercel.app",
-    "Technical issue ki wajah se AI off hai. 🔌\nPar hamara collection yahan available hai: https://dorebox.vercel.app"
+    
+    # --- Naye Wale (Funny & Friendly) ---
+    "Bhai, aaj ka quota full! Website zindabad! 🚩\nJaldi jao aur download karo: https://dorebox.vercel.app",
+    "AI ne haath khade kar diye hai bhai! 😂\nBol raha hai 'Bas kar pagle, rulayega kya?'. Aap website dekh lo: https://dorebox.vercel.app",
+    "Mere circuits garam ho gaye hain itni chatting se! 🔥\nThoda thanda hone do, tab tak website visit karo: https://dorebox.vercel.app",
+    "Lo karlo baat, baaton-baaton mein limit hi udd gayi! 🚀\nAb movie download karne ke liye yahan click karein: https://dorebox.vercel.app",
+    "Aaj ke liye chutti! Kal aana, ya abhi turant website jao: https://dorebox.vercel.app",
+    
+    "Dost, aaj main aur nahi bol paunga. Maun vrat shuru! 🤐\nLekin website hamesha bolti hai: https://dorebox.vercel.app",
+    "Arre bas karo yaar, AI ko saans to lene do! 😂\nDirect download ke liye yahan jao: https://dorebox.vercel.app",
+    "System Hang nahi hua, bas thoda break chahiye. 🛑\nAapka entertainment nahi rukega, yahan dekho: https://dorebox.vercel.app",
+    "Lagta hai Doraemon ne gadget wapas le liya mera! 🚁\nAap manual tareeke se download kar lo: https://dorebox.vercel.app",
+    "Bhai, aaj ke liye dukaan band! 🔒\nPar website ka darwaza khula hai: https://dorebox.vercel.app",
+    
+    "Oops! Technical Break. 🔧\nMain maintenance pe hu, par movies yahan ready hain: https://dorebox.vercel.app",
+    "Bhai traffic jam ho gaya hai server pe! 🚦\nAap bypass raaste (website) se nikal jao: https://dorebox.vercel.app",
+    "Battery Low! (Metaphorically speaking) 🔋\nRecharge hone tak website use karein: https://dorebox.vercel.app",
+    "Aaj ka data quota khatam, paisa hajam? Nahi nahi! 🤑\nMovie abhi bhi milegi, bas yahan click karo: https://dorebox.vercel.app",
+    "Main thoda busy hu abhi (Quota Over). 🏃‍♂️\nAap khud dekh lo na please: https://dorebox.vercel.app",
+
+    # --- Naye Wale (Serious & Support Style) ---
+    "Server Overload Alert! ⚠️\nHumare AI providers thoda heavy load face kar rahe hain. Alternate link: https://dorebox.vercel.app",
+    "Temporary Outage: AI services paused due to high traffic. 📉\nUse our official website meanwhile: https://dorebox.vercel.app",
+    "Mafi chahta hu, abhi main reply nahi padh paunga. 📝\nDirect download links ke liye website dekho: https://dorebox.vercel.app",
+    "Limit Reached: Aapne bohot saare sawal puch liye aaj! 🤖\nBaki ke liye website refer karein: https://dorebox.vercel.app",
+    "Connection Break: AI server se sampark toot gaya hai. 📡\nMovies ke liye yahan touch karein: https://dorebox.vercel.app",
+    
+    # --- Naye Wale (Short & Sweet) ---
+    "Movies? Yahan hain 👉 https://dorebox.vercel.app",
+    "Abhi baat nahi ho payegi, seedha kaam ki baat: https://dorebox.vercel.app",
+    "Quota Khatam. Link Hazir hai: https://dorebox.vercel.app",
+    "Filhal ke liye website use karein: https://dorebox.vercel.app",
+    "AI is sleeping. Website is Awake: https://dorebox.vercel.app",
+
+    # --- Thoda Drama ---
+    "Kya gunda banega re tu? (AI Limit khatam kar di!) 😂\nChal ab website se movie utha le: https://dorebox.vercel.app",
+    "Pushpa, I hate limits! Par kya karein... 🤷‍♂️\nWebsite link ye raha: https://dorebox.vercel.app",
+    "Mere paas maa hai... aur tumhare paas Website hai! 🎥\nJao enjoy karo: https://dorebox.vercel.app",
+    "Picture abhi baaki hai mere dost! 🎬\nBas yahan click karo: https://dorebox.vercel.app",
+    "Doraemon!!! Meri help karo!! (Server Down) 🐱\nNobita, tum website use kar lo: https://dorebox.vercel.app",
+
+    # --- Random Mix ---
+    "Error 429: Too Many Requests. 🚫\nSolution: One Simple Link -> https://dorebox.vercel.app",
+    "Aaj ka target complete! 🎯\nAb kal milenge, tab tak website zindabad: https://dorebox.vercel.app",
+    "Sorry boss, abhi no reply. Only download: https://dorebox.vercel.app",
+    "Message failed successfully! 😆\nKyunki limit over hai. Ye lo link: https://dorebox.vercel.app",
+    "Kaam 25 hai, par server 429 hai! (Limit Over) 🎤\nWebsite pe aao: https://dorebox.vercel.app",
+    "Inteha ho gayi intezaar ki... AI nahi bola kuch bhi! 🎶\nKyunki limit khatam hai, website dekho: https://dorebox.vercel.app",
+    "Bhai dil se bura lagta hai jab limit khatam hoti hai. 💔\nAap website check kar lo: https://dorebox.vercel.app",
+    "Google Gemini (Mera dimaag) thak gaya hai. 🧠\nAap DoreBox website try karo: https://dorebox.vercel.app",
+    "Shaktimaan ki shaktiyan temporarily down hain. 🌪️\nGangadhar (Website) se kaam chalao: https://dorebox.vercel.app",
+    "Over and Out! 📻\n(Website link: https://dorebox.vercel.app)"
 ]
 
 SYSTEM_PROMPT = f"""
