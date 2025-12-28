@@ -4,6 +4,7 @@ import os
 import asyncio
 import json
 import requests
+import random  # Random message choose karne ke liye
 from threading import Thread
 from flask import Flask
 from pymongo import MongoClient
@@ -98,13 +99,30 @@ SEASONS_DATA = [
     {"title": "Doraemon Season 5", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Season%205&type=episodes"}
 ]
 
-# 🔥 LINK FORMATTING (Taaki Bot ganda format na de)
+# Formatting Data
 MOVIE_TEXT = "\n".join([f"🎬 {m['title']}\n🔗 {m['download_link']}" for m in MOVIES_DATA])
 SEASON_TEXT = "\n".join([f"📺 {s['title']}\n🔗 {s['download_link']}" for s in SEASONS_DATA])
-
 ALL_CONTENT = f"MOVIES:\n{MOVIE_TEXT}\n\nSEASONS:\n{SEASON_TEXT}"
 
-# 🔥 NEW SYSTEM PROMPT (Professional + Support + Knowledge)
+# 🔥 MANUAL FALLBACK REPLIES (Jab 429 Error aaye)
+FALLBACK_REPLIES = [
+    "Maafi chaunga dost, aaj ka mera AI quota khatam ho gaya hai! 😓\nPar tension mat lo, aap hamari website pe jaake direct download kar sakte ho: https://dorebox.vercel.app",
+    "Arre yaar, server thoda busy hai abhi. 🐢\nAap tab tak website check kar lo, wahan sab kuch milega: https://dorebox.vercel.app",
+    "Bot thak gaya hai aaj ke liye! 😴\nKoi bhi movie ya episode chahiye to seedha yahan jao: https://dorebox.vercel.app",
+    "Oye hoye! Itne messages ki limit hi cross ho gayi! 😅\nAap please website use kar lo abhi ke liye: https://dorebox.vercel.app",
+    "Sorry bhai, AI abhi rest kar raha hai. 🛌\nAapko jo movie chahiye wo hamari site pe pakka milegi: https://dorebox.vercel.app",
+    "Oops! Daily limit reached. 🚫\nPar aapka entertainment nahi rukega! Yahan click karo: https://dorebox.vercel.app",
+    "AI Brain Overload! 🤯\nMujhe thoda break chahiye. Aap please website visit kar lo: https://dorebox.vercel.app",
+    "Mafi chahta hu, abhi main reply nahi padh paunga. 🤐\nDirect download links ke liye website dekho: https://dorebox.vercel.app",
+    "Bhai, aaj ke liye data khatam! 📉\nPar movies khatam nahi hui hain, website pe jao: https://dorebox.vercel.app",
+    "Mere dimaag ki batti gul ho gayi hai! 💡❌\nAap manual tareeke se yahan se download kar lo: https://dorebox.vercel.app",
+    "Server Error nahi, bas thoda traffic zyada hai! 🚦\nAap website try karo, wo fast hai: https://dorebox.vercel.app",
+    "Chota break le raha hu doston! ☕\nAap tab tak dorebox.vercel.app par movies enjoy karo!",
+    "Message nahi ja raha? Koi baat nahi! 🤷‍♂️\nWebsite hamesha open hai aapke liye: https://dorebox.vercel.app",
+    "Sorry Dost, aaj ka quota over. 🏁\nKal milte hain, tab tak website se download karo: https://dorebox.vercel.app",
+    "Technical issue ki wajah se AI off hai. 🔌\nPar hamara collection yahan available hai: https://dorebox.vercel.app"
+]
+
 SYSTEM_PROMPT = f"""
 IDENTITY:
 You are 'DoreBox AI', an official TELEGRAM Support Bot for the channel 'DoreBox'.
@@ -131,7 +149,7 @@ DATABASE:
 {ALL_CONTENT}
 """
 
-# --- Step 4: AI Logic ---
+# --- Step 4: AI Logic (With 429 Fallback) ---
 def get_ai_response(conversation_history):
     if not OPENROUTER_API_KEY:
         return "⚠️ Error: API Key missing."
@@ -158,10 +176,16 @@ def get_ai_response(conversation_history):
             json=payload,
             timeout=10
         )
+        
+        # 🔥 ERROR HANDLING LOGIC
         if response.status_code == 200:
             return response.json()['choices'][0]['message']['content']
+        elif response.status_code == 429:
+            # 💡 Yahan hum manual message bhejenge
+            return random.choice(FALLBACK_REPLIES)
         else:
             return f"Server Error: {response.status_code}"
+            
     except Exception as e:
         return f"Network Error: {str(e)}"
 
@@ -170,7 +194,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "DoreBox AI Bot Running (Support Mode Activated)"
+    return "DoreBox AI Bot Running (With Manual Fallback)"
 
 # --- Step 6: Bot Handlers ---
 
@@ -178,7 +202,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_histories[user.id] = [] # Reset Memory
     
-    # DB me user save karo
     try:
         if users_collection and not users_collection.find_one({"user_id": user.id}):
             users_collection.insert_one({"user_id": user.id, "name": user.full_name})
@@ -200,15 +223,12 @@ async def ai_chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_message = update.message.text
     
-    # Ignore Commands
     if user_message.startswith('/'):
         return
 
-    # Memory Logic
     if user_id not in user_histories: user_histories[user_id] = []
     user_histories[user_id].append({"role": "user", "content": user_message})
     
-    # Limit History
     if len(user_histories[user_id]) > 10: user_histories[user_id] = user_histories[user_id][-10:]
     
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
@@ -216,20 +236,18 @@ async def ai_chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     loop = asyncio.get_event_loop()
     ai_reply = await loop.run_in_executor(None, get_ai_response, user_histories[user_id])
     
+    # Agar reply manual fallback hai to usse history me mat daalo, taaki AI confuse na ho
+    # Ya daal bhi sakte hain, koi dikkat nahi.
     user_histories[user_id].append({"role": "assistant", "content": ai_reply})
     
-    # IMPORTANT: ParseMode hata diya taaki links gande na dikhe
-    # AI ab plain text me link dega jo clickable hoga.
     await update.message.reply_text(ai_reply)
 
 # --- Admin Commands ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not ADMIN_ID or str(update.effective_user.id) != str(ADMIN_ID): return
-    
     if users_collection is None:
-        await update.message.reply_text("❌ DB Not Connected (Check MONGO_URI)")
+        await update.message.reply_text("❌ DB Not Connected")
         return
-
     try:
         count = users_collection.count_documents({})
         await update.message.reply_text(f"📊 Total Users: {count}")
@@ -238,16 +256,13 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not ADMIN_ID or str(update.effective_user.id) != str(ADMIN_ID): return
-    
     msg = " ".join(context.args)
     if not msg: 
         await update.message.reply_text("Message empty hai!")
         return
-    
     if users_collection is None:
         await update.message.reply_text("❌ DB Not Connected")
         return
-    
     try:
         users = users_collection.find({}, {"user_id": 1})
         sent_count = 0
@@ -271,22 +286,16 @@ def main():
     if not TOKEN:
         print("❌ Error: Bot Token Missing")
         return
-    
     setup_database()
-
     port = int(os.environ.get('PORT', 8080))
     Thread(target=lambda: app.run(host='0.0.0.0', port=port, debug=False)).start()
-
     application = Application.builder().token(TOKEN).build()
-    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("reset", clear_memory))
-    
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_chat_handler))
-
-    print("✅ DoreBox Bot Started (Support Mode)...")
+    print("✅ DoreBox Bot Started (Fallback Mode Added)...")
     application.run_polling()
 
 if __name__ == '__main__':
