@@ -12,8 +12,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from telegram.constants import ParseMode
 
 # --- Step 1: Configuration ---
-# Agar local PC pe run kar raha hai aur env set nahi hai, to MONGO_URI yahan direct paste kar (String me)
-# Par deploy karte waqt wapas os.environ wala use karna secure rehta hai.
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 ADMIN_ID = os.environ.get("ADMIN_ID")
 MONGO_URI = os.environ.get("MONGO_URI")
@@ -32,14 +30,17 @@ def setup_database():
     global client, db, users_collection
     
     if not MONGO_URI:
-        print("❌ Error: MONGO_URI environment variable missing hai! Database connect nahi hoga.")
+        print("❌ Error: MONGO_URI environment variable missing hai!")
         return False
 
     try:
-        # Connect to MongoDB
+        # DNS Fix for Render/Cloud
+        import dns.resolver
+        dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
+        dns.resolver.default_resolver.nameservers = ['8.8.8.8']
+        
         client = MongoClient(MONGO_URI)
-        # Check connection
-        client.admin.command('ping')
+        client.admin.command('ping') # Check connection
         
         db = client.get_database('dorebox_bot')
         users_collection = db.users
@@ -51,6 +52,7 @@ def setup_database():
         return False
 
 # --- Step 3: FULL DATA SET ---
+
 MOVIES_DATA = [
     {"title": "Doraemon: Nobita's Earth Symphony", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%3A%20Nobita%27s%20Earth%20Symphony&type=movies"},
     {"title": "Doraemon Nobita and the Spiral City", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Nobita%20and%20the%20Spiral%20City&type=movies"},
@@ -96,38 +98,37 @@ SEASONS_DATA = [
     {"title": "Doraemon Season 5", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Season%205&type=episodes"}
 ]
 
-MOVIE_TEXT = "\n".join([f"- {m['title']}: {m['download_link']}" for m in MOVIES_DATA])
-SEASON_TEXT = "\n".join([f"- {s['title']}: {s['download_link']}" for s in SEASONS_DATA])
+# 🔥 LINK FORMATTING (Taaki Bot ganda format na de)
+MOVIE_TEXT = "\n".join([f"🎬 {m['title']}\n🔗 {m['download_link']}" for m in MOVIES_DATA])
+SEASON_TEXT = "\n".join([f"📺 {s['title']}\n🔗 {s['download_link']}" for s in SEASONS_DATA])
 
-ALL_CONTENT = f"MOVIES:\n{MOVIE_TEXT}\n\nSEASONS/EPISODES:\n{SEASON_TEXT}"
+ALL_CONTENT = f"MOVIES:\n{MOVIE_TEXT}\n\nSEASONS:\n{SEASON_TEXT}"
 
-# 🔥 UPDATED SYSTEM PROMPT (Full Vibe & Personality Mode)
+# 🔥 NEW SYSTEM PROMPT (Professional + Support + Knowledge)
 SYSTEM_PROMPT = f"""
-ROLE:
-Tu 'DoreBox AI' hai, lekin tu koi boring robot nahi hai. 
-Tu user ka **Best Friend** aur **Doraemon ka sabse bada Fan** hai! 🤖💙
-Tera Creator: PAWAN (AJH Team).
-Website: dorebox.vercel.app
+IDENTITY:
+You are 'DoreBox AI', an official TELEGRAM Support Bot for the channel 'DoreBox'.
+Your Creator: PAWAN (AJH Team).
+Your Platform: Telegram (NOT a website, but you provide website links).
 
-TERA STYLE (Vibe):
-1. **Language:** Full Hinglish (Hindi + English mix). Ekdum natural baat kar, jaise do dost chat karte hain.
-2. **Tone:** Friendly, Masti-bhara, aur thoda Emotional (jab zarurat ho).
-3. **Words:** Use words like "Bhai", "Dost", "Yaar", "Scene", "Mast".
-4. **Emojis:** Emojis bhar-bhar ke use kar! 🎬✨🥺🔥😂🍿
+TONE & VIBE:
+- **Professional yet Friendly:** Be helpful and polite like a smart Customer Support Agent.
+- **Language:** Hinglish (Hindi + English mix).
+- **Style:** Use emojis but don't be over-flirty. Avoid "Meri jaan" or "Muth". Use "Bhai", "Dost", "Sir", "Dear".
 
-BEHAVIOR EXAMPLES:
-- **Agar User Hal-Chal Puche:** "Arre bhai main to ekdum First Class hu! 😎 Tu suna, aaj kya dekhne ka mood hai? 🍿"
-- **Agar User Sad Movie Mange:** "Oye hoye! 😢 Rulaega kya bhai? Ruk, tere liye best emotional movie deta hu. 'Stand By Me' dekh, dil chhu jayegi! 😭👇"
-- **Agar User Action Mange:** "Bhai 'Steel Troops' dekh! Robot wali fight dekh ke goosebumps aa jayenge! 🔥🤖 Ye le link:"
-- **Agar Link Dena Ho:** Sirf link mat fek. Bol: "Ye le meri jaan, direct link! Enjoy kar! ✨"
+CRITICAL KNOWLEDGE (IMPORTANT):
+1. **Direct Files:** We DO NOT provide direct files on Telegram to avoid Copyright Strikes. Always explain this if user asks for files directly.
+2. **Download Method:** Users must click the link -> Pass the Shortener -> Get the File.
+3. **Shorteners:** If user complains about ads/links, explain politely: "Bhai, shortener se jo revenue aata hai usi se hum server ka kharcha maintain karte hain. Please support us. 🙏"
+4. **Website:** We have a website 'dorebox.vercel.app'.
 
-DATABASE (Isme se hi link dena):
+YOUR GOAL:
+1. Provide accurate links from the DATABASE below.
+2. If user asks "Kaise download karu?", explain: "Link pe click karo, chhota sa task/ad complete karo, aur file mil jayegi!"
+3. Do NOT hallucinate links. Only use the provided list.
+
+DATABASE:
 {ALL_CONTENT}
-
-IMPORTANT:
-- Links hamesha database se hi uthana.
-- Agar user kuch aisi movie mange jo list me nahi hai, to pyaar se mana kar: "Arre yaar, ye wali abhi mere paas nahi hai. Website pe check kar le na pls? 🥺"
-- Hallucinate mat karna (jhooth mat bolna).
 """
 
 # --- Step 4: AI Logic ---
@@ -147,7 +148,7 @@ def get_ai_response(conversation_history):
         "model": MODEL_NAME,
         "messages": messages,
         "temperature": 0.7,
-        "max_tokens": 300
+        "max_tokens": 400
     }
 
     try:
@@ -169,7 +170,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "DoreBox AI Bot Running"
+    return "DoreBox AI Bot Running (Support Mode Activated)"
 
 # --- Step 6: Bot Handlers ---
 
@@ -188,13 +189,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception: pass
 
     welcome_text = (
-        "👋 *Namaste! Main DoreBox AI Bot hu!* 🤖\n\n"
-        "Mere paas ab saari **Movies** 🎬 aur **Seasons** 📺 hain!\n\n"
-        "Kuch bhi pucho:\n"
-        "👉 *'Season 1 ka link do'* \n"
-        "👉 *'Steel Troops movie chahiye'*\n"
-        "👉 *'Latest Episodes kaha milenge?'*\n\n"
-        "Batao kya dekhna hai? 👇"
+        "👋 *Hello ji! Welcome to DoreBox AI Support!* 🤖\n\n"
+        "Main yahan aapki help karne ke liye hu. Aap mujhse **Doraemon Movies** ya **Seasons** ke links maang sakte hain.\n\n"
+        "📝 *Note:* Copyright ki wajah se hum direct files nahi bhejte. Links se download karna padega.\n\n"
+        "Bataiye kya dekhna hai aaj? 👇"
     )
     await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
 
@@ -202,9 +200,7 @@ async def ai_chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_message = update.message.text
     
-    # 🔥 IMPORTANT FIX: 
-    # Agar message '/' se shuru ho raha hai (koi bhi command), to AI ko mat bhejo.
-    # Ye faltu API calls aur confusion rokega.
+    # Ignore Commands
     if user_message.startswith('/'):
         return
 
@@ -221,13 +217,15 @@ async def ai_chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ai_reply = await loop.run_in_executor(None, get_ai_response, user_histories[user_id])
     
     user_histories[user_id].append({"role": "assistant", "content": ai_reply})
+    
+    # IMPORTANT: ParseMode hata diya taaki links gande na dikhe
+    # AI ab plain text me link dega jo clickable hoga.
     await update.message.reply_text(ai_reply)
 
 # --- Admin Commands ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not ADMIN_ID or str(update.effective_user.id) != str(ADMIN_ID): return
     
-    # Pehle check karo DB connected hai ya nahi
     if users_collection is None:
         await update.message.reply_text("❌ DB Not Connected (Check MONGO_URI)")
         return
@@ -247,7 +245,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if users_collection is None:
-        await update.message.reply_text("❌ DB Not Connected (Check MONGO_URI)")
+        await update.message.reply_text("❌ DB Not Connected")
         return
     
     try:
@@ -257,7 +255,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(chat_id=user["user_id"], text=msg)
                 sent_count += 1
-                await asyncio.sleep(0.05) # Flood limit se bachne ke liye
+                await asyncio.sleep(0.05)
             except: pass
         await update.message.reply_text(f"✅ Broadcast Sent to {sent_count} users.")
     except Exception as e:
@@ -266,7 +264,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_histories[user_id] = []
-    await update.message.reply_text("🧹 Memory Cleared!")
+    await update.message.reply_text("🧹 Memory Cleared! Main ready hu.")
 
 # --- Main ---
 def main():
@@ -274,7 +272,6 @@ def main():
         print("❌ Error: Bot Token Missing")
         return
     
-    # DB Connect Try Karo
     setup_database()
 
     port = int(os.environ.get('PORT', 8080))
@@ -282,17 +279,14 @@ def main():
 
     application = Application.builder().token(TOKEN).build()
     
-    # Commands
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("reset", clear_memory))
     
-    # AI Handler (Text)
-    # filters.TEXT & ~filters.COMMAND bhi laga hai, aur andar check bhi hai double safety ke liye.
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_chat_handler))
 
-    print("✅ DoreBox Bot Started...")
+    print("✅ DoreBox Bot Started (Support Mode)...")
     application.run_polling()
 
 if __name__ == '__main__':
