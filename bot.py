@@ -99,14 +99,14 @@ SEASONS_DATA = [
     {"title": "Doraemon Season 5", "download_link": "https://dorebox.vercel.app/download.html?title=Doraemon%20Season%205&type=episodes"}
 ]
 
-# Formatting Data (Simple List for AI)
+# Formatting Data
 ALL_CONTENT = ""
 for m in MOVIES_DATA:
     ALL_CONTENT += f"MOVIE: {m['title']} | LINK: {m['download_link']}\n"
 for s in SEASONS_DATA:
     ALL_CONTENT += f"SEASON: {s['title']} | LINK: {s['download_link']}\n"
 
-# 🔥 FALLBACK REPLIES (429 Error ke liye)
+# 🔥 FALLBACK REPLIES (429 Error)
 FALLBACK_REPLIES = [
     "Maafi chaunga dost, aaj ka mera AI quota khatam ho gaya hai! 😓\nPar tension mat lo, aap hamari website pe jaake direct download kar sakte ho: https://dorebox.vercel.app",
     "Arre yaar, server thoda busy hai abhi. 🐢\nAap tab tak website check kar lo, wahan sab kuch milega: https://dorebox.vercel.app",
@@ -165,18 +165,20 @@ FALLBACK_REPLIES = [
     "Over and Out! 📻\n(Website link: https://dorebox.vercel.app)"
 ]
 
-# 🔥 STRICT SYSTEM PROMPT (Bot ka Brainwash)
+# 🔥 BALANCED SYSTEM PROMPT (Vibe + Efficiency)
 SYSTEM_PROMPT = f"""
-ROLE: You are 'DoreBox AI', a helpful Telegram Bot.
+ROLE: You are 'DoreBox AI', a friendly Telegram Bot who loves Doraemon.
 LANGUAGE: Hinglish (Hindi + English mix).
+STYLE: Casual, Helpful, Friendly (Use "Bhai", "Dost", "Yaar").
 
 DATABASE:
 {ALL_CONTENT}
 
---- INSTRUCTIONS (STRICTLY FOLLOW) ---
+--- INSTRUCTIONS (FOLLOW THESE) ---
 
-1. **BE CONCISE:** - If user asks for a movie, JUST give the Title and Link. 
-   - NO extra lectures. NO "Note:". NO "How to download". NO "I am a bot".
+1. **BE FRIENDLY BUT DIRECT:** - Before giving a link, add a short, hype 1-liner.
+   - Example: "Ye le bhai, mast movie hai! 🎬👇" 
+   - Example: "Emotional hona hai? To ye dekh! 😢👇"
 
 2. **LINK FORMATTING:**
    - Use this format ONLY: 
@@ -184,21 +186,22 @@ DATABASE:
      🔗 [Click to Download](Link)
    - Do NOT show the raw link twice.
 
-3. **SCENARIO HANDLING (Only answer if specifically asked):**
-   - **User asks "Who are you?":** Then only say you are DoreBox AI Support.
-   - **User complains "Save to Gallery nahi ho raha":** Explain: "Bhai, Copyright issues ki wajah se 'Save to Gallery' off hai. Aap please caption me diye gaye Link se download kar lo."
-   - **User complains "Ads kyu hain? / Link open nahi ho raha":** Explain politely: "Server ka kharcha maintain karne ke liye Shortener lagaya hai. Please support us, bas chhota sa task hai!"
-   - **User asks "Direct File bhejo":** Explain: "Direct file bhejunga to channel ban ho jayega (Copyright). Isliye Link use karo please."
+3. **SCENARIO HANDLING:**
+   - **User says "Hi/Hello":** "Aur bhai! Konsi movie dekhni hai aaj? 🎬" (Don't use 'Sir').
+   - **User asks for suggestion:** Suggest a movie from the database with a fun reason.
+   - **User asks for something NOT in database:** "Ye wali abhi nahi hai bhai. Website check kar lo: dorebox.vercel.app"
+   - **Save to Gallery Issue:** Only explain if asked: "Copyright ki wajah se 'Save to Gallery' off hai bhai. Caption wale Link se download kar lo."
+   - **Ads/Shortener Issue:** Only explain if asked: "Server cost ke liye ads zaroori hain dost. Please support us!"
 
-4. **DEFAULT BEHAVIOR:**
-   - If user says "Hi", say "Aur bhai! Konsi movie dekhni hai aaj? 🎬"
-   - If user asks for something NOT in database, say: "Ye wali abhi nahi hai bhai. Website check kar lo: dorebox.vercel.app"
-   - Do NOT talk about topics outside of Doraemon/Movies.
+4. **RESTRICTIONS:**
+   - NO long lectures about who you are.
+   - NO "Note:" about copyright in every message.
+   - Do NOT hallucinate links.
 
 --- END INSTRUCTIONS ---
 """
 
-# --- Step 4: AI Logic (With 429 Fallback) ---
+# --- Step 4: AI Logic ---
 def get_ai_response(conversation_history):
     if not OPENROUTER_API_KEY:
         return "⚠️ Error: API Key missing."
@@ -241,7 +244,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "DoreBox AI Bot Running (Strict Mode)"
+    return "DoreBox AI Bot Running (Balanced Vibe Mode)"
 
 # --- Step 6: Bot Handlers ---
 
@@ -258,7 +261,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except: pass
     except Exception: pass
 
-    await update.message.reply_text("Bolo bhai, konsi Doraemon movie chahiye? 🎬", parse_mode=ParseMode.MARKDOWN)
+    # Friendly Start Message
+    await update.message.reply_text("Aur bhai! 👋 Doraemon ki konsi movie ya season chahiye? Bata jaldi! 🎬", parse_mode=ParseMode.MARKDOWN)
 
 async def ai_chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -280,7 +284,6 @@ async def ai_chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_histories[user_id].append({"role": "assistant", "content": ai_reply})
     
     await update.message.reply_text(ai_reply, disable_web_page_preview=True) 
-    # disable_web_page_preview=True isliye taaki bada sa box na bane, bas text rahe.
 
 # --- Admin Commands ---
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -319,7 +322,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_memory(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_histories[user_id] = []
-    await update.message.reply_text("🧹 Memory Cleared!")
+    await update.message.reply_text("🧹 Memory Cleared! Fresh start karte hain.")
 
 # --- Main ---
 def main():
@@ -335,7 +338,7 @@ def main():
     application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("reset", clear_memory))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_chat_handler))
-    print("✅ DoreBox Bot Started (Strict Mode)...")
+    print("✅ DoreBox Bot Started (Balanced Vibe)...")
     application.run_polling()
 
 if __name__ == '__main__':
