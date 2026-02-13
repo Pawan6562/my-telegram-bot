@@ -18,7 +18,7 @@ ADMIN_ID = os.environ.get("ADMIN_ID")
 MONGO_URI = os.environ.get("MONGO_URI")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
-MODEL_NAME = "google/gemma-3-27b-it:free"
+MODEL_NAME = "arcee-ai/trinity-large-preview:free"
 
 # --- Step 2: Database Connection ---
 client = None
